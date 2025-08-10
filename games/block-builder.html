@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <title>Block Builder</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            background: #060a12;
+            color: #eafff6;
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        #hud {
+            position: fixed;
+            left: 12px;
+            right: 12px;
+            top: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .hud-card {
+            pointer-events: auto;
+            background: rgba(0, 0, 0, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 10px;
+            padding: 8px 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #palette {
+            display: flex;
+            gap: 6px;
+        }
+
+        .swatch {
+            width: 22px;
+            height: 22px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.35) inset;
+        }
+
+        .swatch[data-active="true"] {
+            outline: 2px solid #00ffa6;
+            outline-offset: 2px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #00ffa6, #00b3ff);
+            color: #001b14;
+            font-weight: 800;
+            border: none;
+            border-radius: 10px;
+            padding: 8px 10px;
+            cursor: pointer;
+        }
+
+        .btn.alt {
+            background: rgba(255, 255, 255, 0.06);
+            color: #eafff6;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        #fps {
+            min-width: 40px;
+            text-align: right;
+            font-weight: 700;
+        }
+
+        #tips {
+            position: fixed;
+            bottom: 12px;
+            left: 12px;
+            right: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            opacity: 0.85;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .tip {
+            pointer-events: auto;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 12px;
+        }
+
+        .badge {
+            font-weight: 900;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #00ffa6, #00b3ff);
+            color: #001b14;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+    <!-- Core libs (match other games) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.js"></script>
+    <script src="https://unpkg.com/yuka@0.7.8/build/yuka.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+</head>
+
+<body>
+    <div id="hud">
+        <div class="hud-card">
+            <span class="badge">BLOCK BUILDER</span>
+            <span style="opacity:.8">AI Assist:</span>
+            <button id="toggleAI" class="btn alt">Off</button>
+            <span style="opacity:.8">Auto‑Builder:</span>
+            <button id="autoBuild" class="btn alt">Run</button>
+        </div>
+        <div class="hud-card" id="palette"></div>
+        <div class="hud-card">
+            <button id="modePlace" class="btn">Place</button>
+            <button id="modeErase" class="btn alt">Erase</button>
+            <button id="saveBtn" class="btn alt">Save</button>
+            <button id="clearBtn" class="btn alt">Clear</button>
+            <div>FPS: <span id="fps">60</span></div>
+        </div>
+    </div>
+    <div id="tips">
+        <div class="tip">Left click: place • Right click / Shift: erase • Mouse drag: orbit • Scroll: zoom</div>
+        <div class="tip">AI learns your color style and suggests the next color. Toggle AI for assisted building.</div>
+    </div>
+    <script>
+        'use strict';
+        // Shorthands
+        const { Scene, PerspectiveCamera, WebGLRenderer, Color, FogExp2, Vector2, Vector3, Raycaster, AmbientLight, DirectionalLight,
+            PlaneBufferGeometry, Mesh, MeshStandardMaterial, GridHelper, InstancedMesh, BoxBufferGeometry, Matrix4, Object3D,
+            MeshBasicMaterial, PointsMaterial, Points, BufferGeometry, Float32BufferAttribute, AdditiveBlending, sRGBEncoding,
+            SRGBColorSpace, CanvasTexture, RepeatWrapping } = THREE;
+
+        // Palette (8 colors)
+        const PALETTE = [0xff5f6d, 0xffd166, 0x06d6a0, 0x118ab2, 0x8338ec, 0xff006e, 0x80ed99, 0xf07167];
+        let selectedColorIdx = 0;
+
+        // Renderer
+        const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        renderer.outputEncoding = (renderer.outputEncoding || sRGBEncoding);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Scene & camera
+        const scene = new Scene();
+        scene.background = new Color(0x06121a);
+        scene.fog = new FogExp2(0x06121a, 0.04);
+        const camera = new PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+        camera.position.set(15, 16, 15);
+        camera.lookAt(0, 0, 0);
+
+        // Lights
+        const ambient = new AmbientLight(0xcfe7ff, 0.55); scene.add(ambient);
+        const dir = new DirectionalLight(0xffffff, 0.75); dir.position.set(8, 12, 6); scene.add(dir);
+
+        // Sky gradient dome via big plane + shaderless trick using CanvasTexture
+        function makeSkyTexture() {
+            const c = document.createElement('canvas'); c.width = 512; c.height = 512; const g = c.getContext('2d');
+            const grd = g.createLinearGradient(0, 0, 0, 512);
+            grd.addColorStop(0, '#0a2a43'); grd.addColorStop(1, '#06121a');
+            g.fillStyle = grd; g.fillRect(0, 0, 512, 512);
+            const tex = new CanvasTexture(c); tex.wrapS = tex.wrapT = RepeatWrapping; tex.needsUpdate = true; return tex;
+        }
+        const skyGeo = new PlaneBufferGeometry(200, 200, 1, 1);
+        const skyMat = new MeshBasicMaterial({ map: makeSkyTexture(), depthWrite: false, fog: false });
+        const sky = new Mesh(skyGeo, skyMat); sky.rotation.x = -Math.PI / 2; sky.position.y = 80; sky.material.opacity = 0.6; sky.material.transparent = true; scene.add(sky);
+
+        // Ground
+        const groundGeo = new PlaneBufferGeometry(200, 200);
+        const groundMat = new MeshStandardMaterial({ color: 0x0b1f2d, roughness: 0.95, metalness: 0.02 });
+        const ground = new Mesh(groundGeo, groundMat); ground.rotation.x = -Math.PI / 2; scene.add(ground);
+        const grid = new GridHelper(200, 200, 0x1ce6b3, 0x154e55); grid.position.y = 0.001; grid.material.opacity = 0.25; grid.material.transparent = true; scene.add(grid);
+
+        // Camera orbit controls (custom minimal)
+        const orbit = { target: new Vector3(0, 0, 0), dist: 20, az: Math.PI * 0.25, el: 0.9, dragging: false, last: new Vector2() };
+        function updateCamera() {
+            const x = orbit.target.x + orbit.dist * Math.cos(orbit.el) * Math.cos(orbit.az);
+            const y = orbit.target.y + orbit.dist * Math.sin(orbit.el);
+            const z = orbit.target.z + orbit.dist * Math.cos(orbit.el) * Math.sin(orbit.az);
+            camera.position.set(x, y, z);
+            camera.lookAt(orbit.target);
+        }
+        updateCamera();
+        renderer.domElement.addEventListener('mousedown', (e) => { orbit.dragging = true; orbit.last.set(e.clientX, e.clientY); });
+        window.addEventListener('mouseup', () => orbit.dragging = false);
+        window.addEventListener('mousemove', (e) => {
+            if (!orbit.dragging) return;
+            const dx = e.clientX - orbit.last.x, dy = e.clientY - orbit.last.y; orbit.last.set(e.clientX, e.clientY);
+            orbit.az -= dx * 0.005; orbit.el -= dy * 0.004; orbit.el = Math.max(0.1, Math.min(1.35, orbit.el)); updateCamera();
+        });
+        window.addEventListener('wheel', (e) => { orbit.dist *= (1 + (e.deltaY > 0 ? 0.1 : -0.1)); orbit.dist = Math.max(6, Math.min(80, orbit.dist)); updateCamera(); });
+
+        // Raycasting for placement
+        const raycaster = new Raycaster();
+        const mouse = new Vector2();
+        let hoverCell = new Vector3();
+        function getIntersectOnGround(clientX, clientY) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const hit = raycaster.intersectObject(ground, false)[0];
+            if (!hit) return null; return hit.point;
+        }
+
+        function worldToGrid(p) { return new Vector3(Math.round(p.x), Math.round(p.y), Math.round(p.z)); }
+        function gridSnapXZ(p) { return new Vector3(Math.round(p.x), 0, Math.round(p.z)); }
+
+        // Instanced blocks
+        const MAX_INSTANCES = 20000;
+        const boxGeo = new BoxBufferGeometry(1, 1, 1);
+        const boxMat = new MeshStandardMaterial({ roughness: 0.6, metalness: 0.08, color: 0xffffff, vertexColors: true });
+        const blockMesh = new InstancedMesh(boxGeo, boxMat, MAX_INSTANCES);
+        blockMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        scene.add(blockMesh);
+        let nextIndex = 0;
+        const tmpObj = new Object3D();
+        const colorObj = new THREE.Color();
+        const blockMap = new Map(); // key "x,y,z" -> { index, colorIdx, scale }
+
+        function keyOf(x, y, z) { return `${x},${y},${z}`; }
+
+        // Ghost preview
+        const ghost = new Mesh(boxGeo, new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 }));
+        ghost.visible = false; scene.add(ghost);
+
+        function setInstanceAt(index, pos, scl = 1) {
+            tmpObj.position.copy(pos);
+            tmpObj.scale.setScalar(scl);
+            tmpObj.rotation.set(0, 0, 0);
+            tmpObj.updateMatrix();
+            blockMesh.setMatrixAt(index, tmpObj.matrix);
+            blockMesh.instanceMatrix.needsUpdate = true;
+        }
+
+        function setInstanceColorAt(index, colorIdx) {
+            colorObj.setHex(PALETTE[colorIdx] >>> 0);
+            blockMesh.setColorAt(index, colorObj);
+            if (blockMesh.instanceColor) blockMesh.instanceColor.needsUpdate = true;
+        }
+
+        // Particles
+        const particles = [];
+        function spawnSparks(pos, baseColor) {
+            const count = 28;
+            const g = new BufferGeometry();
+            const positions = new Float32BufferAttribute(new Float32Array(count * 3), 3);
+            const velocities = [];
+            for (let i = 0; i < count; i++) {
+                positions.setXYZ(i, pos.x, pos.y, pos.z);
+                const v = new Vector3((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2);
+                velocities.push(v);
+            }
+            g.setAttribute('position', positions);
+            const m = new PointsMaterial({ size: 0.06, color: baseColor, transparent: true, opacity: 0.95, depthWrite: false, blending: AdditiveBlending });
+            const p = new Points(g, m); p.userData = { velocities, life: 0.7 };
+            scene.add(p); particles.push(p);
+        }
+
+        function updateParticles(dt) {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i]; const vel = p.userData.velocities; const life = p.userData.life;
+                const posAttr = p.geometry.getAttribute('position');
+                for (let j = 0; j < vel.length; j++) {
+                    const x = posAttr.getX(j) + vel[j].x * dt;
+                    const y = posAttr.getY(j) + vel[j].y * dt;
+                    const z = posAttr.getZ(j) + vel[j].z * dt;
+                    vel[j].y -= 3.0 * dt; // gravity
+                    posAttr.setXYZ(j, x, y, z);
+                }
+                posAttr.needsUpdate = true;
+                p.material.opacity *= (1 - dt * (1 / life));
+                p.userData.life -= dt;
+                if (p.userData.life <= 0) { scene.remove(p); p.geometry.dispose(); p.material.dispose(); particles.splice(i, 1); }
+            }
+        }
+
+        // Simple funny SFX via Web Audio
+        let listenerCtx = null; let masterGain = null;
+        function ensureAudio() {
+            if (listenerCtx) return;
+            listenerCtx = new (window.AudioContext || window.webkitAudioContext)();
+            masterGain = listenerCtx.createGain(); masterGain.gain.value = 0.2; masterGain.connect(listenerCtx.destination);
+        }
+        function playPop(freq = 440, len = 0.07, vol = 0.15) {
+            if (!listenerCtx) return; const t = listenerCtx.currentTime;
+            const o = listenerCtx.createOscillator(); const g = listenerCtx.createGain(); o.type = 'sine'; o.frequency.value = freq;
+            g.gain.value = 0; g.connect(masterGain); o.connect(g);
+            g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+            o.start(t); o.stop(t + len + 0.02);
+        }
+        function playBoop(freq = 220, len = 0.08, vol = 0.18) {
+            if (!listenerCtx) return; const t = listenerCtx.currentTime;
+            const o = listenerCtx.createOscillator(); const g = listenerCtx.createGain(); o.type = 'square'; o.frequency.value = freq;
+            g.gain.value = 0; g.connect(masterGain); o.connect(g);
+            g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+            o.start(t); o.stop(t + len + 0.02);
+        }
+        function playChirp() { if (!listenerCtx) return; playPop(880, 0.06, 0.08); setTimeout(() => playPop(1320, 0.05, 0.06), 60); }
+
+        // Build UI palette
+        const paletteEl = document.getElementById('palette');
+        const swatches = [];
+        PALETTE.forEach((hex, i) => {
+            const el = document.createElement('div'); el.className = 'swatch'; el.style.background = `#${hex.toString(16).padStart(6, '0')}`;
+            el.addEventListener('click', () => { selectedColorIdx = i; refreshSwatches(); });
+            paletteEl.appendChild(el); swatches.push(el);
+        });
+        function refreshSwatches(aiIdx = null) {
+            swatches.forEach((el, i) => {
+                el.toggleAttribute('data-active', i === selectedColorIdx);
+                el.style.outlineColor = (aiIdx === i) ? '#fffa76' : '#00ffa6';
+            });
+        }
+        refreshSwatches();
+
+        // Mode buttons
+        let eraseMode = false;
+        const modePlace = document.getElementById('modePlace');
+        const modeErase = document.getElementById('modeErase');
+        modePlace.addEventListener('click', () => { eraseMode = false; modePlace.classList.remove('alt'); modeErase.classList.add('alt'); });
+        modeErase.addEventListener('click', () => { eraseMode = true; modeErase.classList.remove('alt'); modePlace.classList.add('alt'); });
+
+        // AI assist toggle and Auto-Builder
+        let aiEnabled = false;
+        const toggleAI = document.getElementById('toggleAI');
+        toggleAI.addEventListener('click', () => { aiEnabled = !aiEnabled; toggleAI.textContent = aiEnabled ? 'On' : 'Off'; playChirp(); });
+        document.getElementById('autoBuild').addEventListener('click', () => {
+            autoBuildPattern();
+        });
+
+        // Save / Clear
+        const SAVE_KEY = 'blockbuilder.save.v1';
+        document.getElementById('saveBtn').addEventListener('click', () => { ensureAudio(); saveWorld(); playPop(700); });
+        document.getElementById('clearBtn').addEventListener('click', () => { ensureAudio(); clearWorld(); playBoop(160); });
+
+        // Placement helpers
+        function placeBlock(cell, colorIdx, scaleAnim = true) {
+            const k = keyOf(cell.x, cell.y, cell.z); if (blockMap.has(k)) return;
+            if (nextIndex >= MAX_INSTANCES) return;
+            setInstanceAt(nextIndex, new Vector3(cell.x, 0.5, cell.z), scaleAnim ? 0.01 : 1);
+            setInstanceColorAt(nextIndex, colorIdx);
+            blockMap.set(k, { index: nextIndex, colorIdx, scale: scaleAnim ? 0.01 : 1 });
+            spawnSparks(new Vector3(cell.x, 0.7, cell.z), PALETTE[colorIdx]);
+            nextIndex++;
+            ensureAudio(); playPop(400 + Math.random() * 200);
+        }
+
+        function removeBlock(cell) {
+            const k = keyOf(cell.x, cell.y, cell.z); const rec = blockMap.get(k); if (!rec) return;
+            const lastIndex = nextIndex - 1;
+            if (rec.index !== lastIndex) {
+                // move last instance into this slot
+                const lastPosKey = [...blockMap.entries()].find(([, v]) => v.index === lastIndex)?.[0];
+                const [lx, ly, lz] = lastPosKey.split(',').map(Number);
+                const movedRec = blockMap.get(lastPosKey);
+                const mat = new Matrix4(); blockMesh.getMatrixAt(lastIndex, mat); blockMesh.setMatrixAt(rec.index, mat);
+                const col = new THREE.Color(); if (blockMesh.instanceColor) { blockMesh.getColorAt(lastIndex, col); blockMesh.setColorAt(rec.index, col); }
+                movedRec.index = rec.index; blockMap.set(lastPosKey, movedRec);
+            }
+            nextIndex--; // shrink
+            blockMap.delete(k);
+            blockMesh.instanceMatrix.needsUpdate = true; if (blockMesh.instanceColor) blockMesh.instanceColor.needsUpdate = true;
+            spawnSparks(new Vector3(cell.x, 0.7, cell.z), 0xffffff);
+            ensureAudio(); playBoop(180 + Math.random() * 80);
+        }
+
+        // Mouse interaction
+        let isErasingByMouse = false;
+        renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            ensureAudio();
+            const pos = getIntersectOnGround(e.clientX, e.clientY); if (!pos) return;
+            const cell = gridSnapXZ(pos);
+            if (e.button === 2 || e.shiftKey || eraseMode) { removeBlock(cell); isErasingByMouse = true; return; }
+            const colorIdx = aiEnabled ? (aiSuggestColorAt(cell.x, cell.z) ?? selectedColorIdx) : selectedColorIdx;
+            placeBlock(cell, colorIdx, true);
+        });
+        window.addEventListener('pointerup', () => { isErasingByMouse = false; });
+        window.addEventListener('pointermove', (e) => {
+            const pos = getIntersectOnGround(e.clientX, e.clientY); if (!pos) { ghost.visible = false; return; }
+            const cell = gridSnapXZ(pos); hoverCell.copy(cell);
+            ghost.position.set(cell.x, 0.5, cell.z); ghost.visible = true;
+        });
+
+        // AI: Learn favorite colors from local neighborhood context
+        let aiModel = null;
+        const trainX = []; // feature vectors
+        const trainY = []; // color indices
+
+        function featuresFor(x, z) {
+            // Neighbors within 1 in XZ: counts per color (8), height (fixed 0), global palette histogram (8)
+            const nbCounts = new Array(PALETTE.length).fill(0);
+            for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+                if (dx === 0 && dz === 0) continue;
+                const k = keyOf(x + dx, 0, z + dz); const rec = blockMap.get(k); if (rec) nbCounts[rec.colorIdx]++;
+            }
+            const hist = globalHistogram();
+            const height = 0; // flat world baseline
+            const arr = [...nbCounts.map(v => v / 8), height, ...hist.map(v => v / Math.max(1, totalBlocks()))];
+            return arr;
+        }
+        function totalBlocks() { return nextIndex; }
+        function globalHistogram() {
+            const hist = new Array(PALETTE.length).fill(0);
+            blockMap.forEach(rec => hist[rec.colorIdx]++); return hist;
+        }
+        function ensureModel() {
+            if (aiModel) return aiModel;
+            const inSize = PALETTE.length /*nb*/ + 1 /*height*/ + PALETTE.length /*hist*/;
+            aiModel = tf.sequential();
+            aiModel.add(tf.layers.dense({ inputShape: [inSize], units: 24, activation: 'relu' }));
+            aiModel.add(tf.layers.dense({ units: 16, activation: 'relu' }));
+            aiModel.add(tf.layers.dense({ units: PALETTE.length, activation: 'softmax' }));
+            aiModel.compile({ optimizer: tf.train.adam(0.01), loss: 'categoricalCrossentropy' });
+            return aiModel;
+        }
+        async function trainModelIfReady() {
+            if (trainX.length < 12) return;
+            const xs = tf.tensor2d(trainX);
+            const ys = tf.tensor2d(trainY.map(i => oneHot(i, PALETTE.length)));
+            try { await ensureModel().fit(xs, ys, { epochs: 6, batchSize: 8, verbose: 0 }); } catch { }
+            xs.dispose(); ys.dispose();
+        }
+        function oneHot(i, n) { const a = new Array(n).fill(0); a[i] = 1; return a; }
+        function aiSuggestColorAt(x, z) {
+            try {
+                if (!aiEnabled) return null;
+                if (!aiModel || trainX.length < 8) return selectedColorIdx; // cold start
+                const feat = tf.tensor2d([featuresFor(x, z)]);
+                const pred = aiModel.predict(feat); const data = pred.dataSync();
+                let maxI = 0; for (let i = 1; i < data.length; i++) if (data[i] > data[maxI]) maxI = i;
+                feat.dispose(); pred.dispose();
+                // Highlight suggestion in palette
+                refreshSwatches(maxI);
+                return maxI;
+            } catch { return selectedColorIdx; }
+        }
+
+        // Auto-builder: paints a small pattern using AI suggestions
+        function autoBuildPattern() {
+            const center = hoverCell.clone();
+            const radius = 4 + (Math.random() * 3 | 0);
+            for (let dz = -radius; dz <= radius; dz++) for (let dx = -radius; dx <= radius; dx++) {
+                const d2 = dx * dx + dz * dz; if (d2 > radius * radius) continue;
+                const x = center.x + dx, z = center.z + dz; const cell = new Vector3(x, 0, z);
+                const colorIdx = aiEnabled ? (aiSuggestColorAt(x, z) ?? selectedColorIdx) : selectedColorIdx;
+                if (Math.random() < 0.5) placeBlock(cell, colorIdx, true);
+            }
+            playChirp();
+        }
+
+        // Capture training example when user places a block
+        function recordTraining(cell, colorIdx) {
+            const f = featuresFor(cell.x, cell.z); trainX.push(f); trainY.push(colorIdx);
+            if (trainX.length % 10 === 0) trainModelIfReady();
+        }
+
+        // Hook into placeBlock to record training
+        const _placeBlock = placeBlock;
+        placeBlock = function (cell, colorIdx, scaleAnim = true) { _placeBlock(cell, colorIdx, scaleAnim); recordTraining(cell, colorIdx); };
+
+        // Animate new placements via scaling up smoothly
+        function animatePlacements(dt) {
+            if (blockMap.size === 0) return;
+            let updated = false;
+            blockMap.forEach((rec, k) => {
+                if (rec.scale < 1) {
+                    rec.scale = Math.min(1, rec.scale + dt * 8);
+                    const [x, y, z] = k.split(',').map(Number);
+                    setInstanceAt(rec.index, new Vector3(x, 0.5, z), rec.scale);
+                    updated = true;
+                }
+            });
+            if (updated) blockMesh.instanceMatrix.needsUpdate = true;
+        }
+
+        // Save / Load
+        function saveWorld() {
+            const data = [];
+            blockMap.forEach((rec, k) => { const [x, y, z] = k.split(',').map(Number); data.push([x, z, rec.colorIdx]); });
+            localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+        }
+        function loadWorld() {
+            const raw = localStorage.getItem(SAVE_KEY); if (!raw) return;
+            const data = JSON.parse(raw);
+            clearWorld();
+            data.forEach(([x, z, c]) => placeBlock(new Vector3(x, 0, z), c, false));
+        }
+        function clearWorld() {
+            blockMap.clear(); nextIndex = 0; blockMesh.count = 0; blockMesh.instanceMatrix.needsUpdate = true; if (blockMesh.instanceColor) blockMesh.instanceColor.needsUpdate = true;
+        }
+
+        // Basic FPS monitor
+        let last = performance.now(); let frames = 0; let fps = 60; let lastFpsUpdate = performance.now();
+        const fpsEl = document.getElementById('fps');
+
+        // Initial
+        loadWorld();
+
+        // Main loop
+        const clock = new THREE.Clock();
+        function loop() {
+            requestAnimationFrame(loop);
+            const dt = clock.getDelta();
+
+            // Preview ghost color by AI
+            if (ghost.visible) {
+                const suggested = aiEnabled ? aiSuggestColorAt(hoverCell.x, hoverCell.z) : null;
+                const showColor = (suggested != null) ? PALETTE[suggested] : PALETTE[selectedColorIdx];
+                ghost.material.color.setHex(showColor);
+                ghost.scale.setScalar(0.98 + Math.sin(performance.now() * 0.004) * 0.02);
+            }
+
+            animatePlacements(dt);
+            updateParticles(dt);
+
+            // Soft grid pulse
+            grid.material.opacity = 0.18 + 0.06 * Math.sin(performance.now() * 0.002);
+
+            renderer.render(scene, camera);
+
+            // FPS
+            frames++;
+            const now = performance.now();
+            if (now - lastFpsUpdate > 1000) {
+                fps = Math.round(frames * 1000 / (now - lastFpsUpdate));
+                frames = 0; lastFpsUpdate = now; fpsEl.textContent = String(fps);
+            }
+        }
+        loop();
+
+        // Activate audio on first interaction
+        window.addEventListener('pointerdown', () => { ensureAudio(); }, { once: true });
+
+        // Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+
+</html>
