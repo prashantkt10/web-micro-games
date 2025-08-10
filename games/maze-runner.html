@@ -265,6 +265,13 @@
       let startMarker, exitPortal;
       let ambientLight, pointLight;
 
+      // Visual extras
+      let decorGroup = null; // wall paintings & art panels
+      let dustPoints = null; // floating dust motes
+      let dustData = []; // {vx, vy}
+      let sweepMesh = null; // sweeping light band
+      const portalSprites = []; // additive glow sprites
+
       // Audio
       let listener, masterGain, audioEnabled = false;
 
@@ -637,17 +644,101 @@
         wallIMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         mazeGroup.add(wallIMesh);
 
+        // Decorative group for paintings
+        if (decorGroup) { mazeGroup.remove(decorGroup); }
+        decorGroup = new THREE.Group();
+        mazeGroup.add(decorGroup);
+
         let idx = 0;
         const m = new THREE.Matrix4();
         const q = new THREE.Quaternion();
         const v = new THREE.Vector3();
         const s = new THREE.Vector3(1, 1, 1);
 
+        // Create an abstract neon painting texture
+        function createPaintingTexture(w = 256, h = 256) {
+          const c = document.createElement('canvas'); c.width = w; c.height = h;
+          const g = c.getContext('2d');
+          const grad = g.createLinearGradient(0, 0, w, h);
+          grad.addColorStop(0, '#0a1a18'); grad.addColorStop(1, '#0a0f1e');
+          g.fillStyle = grad; g.fillRect(0, 0, w, h);
+          // soft glow orbs
+          for (let i = 0; i < 6; i++) {
+            const x = Math.random() * w, y = Math.random() * h, r = 30 + Math.random() * 70;
+            const gg = g.createRadialGradient(x, y, 1, x, y, r);
+            const hue = 160 + Math.random() * 120; // aqua to magenta
+            gg.addColorStop(0, `hsla(${hue},100%,70%,0.9)`);
+            gg.addColorStop(1, 'rgba(0,0,0,0)');
+            g.globalCompositeOperation = 'lighter';
+            g.fillStyle = gg; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+            g.globalCompositeOperation = 'source-over';
+          }
+          // neon strokes
+          g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = 4.5;
+          for (let i = 0; i < 5; i++) {
+            const hue = 150 + Math.random() * 180;
+            g.strokeStyle = `hsla(${hue},100%,70%,0.85)`;
+            g.beginPath();
+            const segments = 4 + (Math.random() * 3 | 0);
+            let x = Math.random() * w * 0.2, y = Math.random() * h;
+            g.moveTo(x, y);
+            for (let sIdx = 0; sIdx < segments; sIdx++) {
+              x += w * (0.15 + Math.random() * 0.2);
+              y += (Math.random() - 0.5) * h * 0.4;
+              g.quadraticCurveTo(x - 30, y - 20, x, y);
+            }
+            g.stroke();
+          }
+          return new THREE.CanvasTexture(c);
+        }
+
+        // Maybe add a painting to a wall segment
+        function maybeAddPainting(wx, wy, angleRad) {
+          if (Math.random() > 0.12) return;
+          const panelW = CELL_SIZE * (0.42 + Math.random() * 0.25);
+          const panelH = WALL_HEIGHT * (0.5 + Math.random() * 0.25);
+          const tex = createPaintingTexture(256, 256);
+          tex.anisotropy = 4; tex.needsUpdate = true;
+
+          const artMat = new THREE.MeshStandardMaterial({
+            map: tex,
+            emissive: new THREE.Color(0x00ffc8).multiplyScalar(0.2),
+            emissiveIntensity: 0.6,
+            metalness: 0.1,
+            roughness: 0.6,
+            transparent: true,
+            side: THREE.DoubleSide
+          });
+          const artGeo = new THREE.PlaneGeometry(panelW * 0.96, panelH * 0.96);
+          const art = new THREE.Mesh(artGeo, artMat);
+
+          // Frame
+          const frameMat = new THREE.MeshStandardMaterial({ color: 0x0b1a16, metalness: 0.8, roughness: 0.2 });
+          const frameGeo = new THREE.PlaneGeometry(panelW, panelH);
+          const frame = new THREE.Mesh(frameGeo, frameMat);
+
+          // Mount
+          const group = new THREE.Group();
+          frame.position.z = -0.002; // tiny offset to avoid z-fighting with art
+          group.add(frame);
+          group.add(art);
+
+          // Place slightly off the wall towards one side
+          const normal = new THREE.Vector3(Math.sin(angleRad), 0, Math.cos(angleRad));
+          const side = Math.random() < 0.5 ? 1 : -1;
+          const offset = normal.clone().multiplyScalar(side * (WALL_THICKNESS * 0.5 + 0.03));
+          group.position.set(wx + offset.x, WALL_HEIGHT * (0.55 + Math.random() * 0.15), wy + offset.z);
+          group.rotation.y = angleRad + (side < 0 ? Math.PI : 0);
+          group.userData.type = 'painting';
+          decorGroup.add(group);
+        }
+
         const placeWall = (wx, wy, angleRad) => {
           v.set(wx, WALL_HEIGHT / 2, wy);
           q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), angleRad);
           m.compose(v, q, s);
           wallIMesh.setMatrixAt(idx++, m);
+          maybeAddPainting(wx, wy, angleRad);
         };
 
         // Cells
@@ -695,6 +786,11 @@
         );
         exitPortal.position.copy(exitPosition).y = 1.2;
         mazeGroup.add(exitPortal);
+
+        // Add extras: portal glow, dust, and a sweeping light band
+        enhancePortal();
+        setupDustMotes(cols, rows);
+        setupLightSweep(cols, rows);
       }
 
       function cellCenterWorld(x, y) {
@@ -719,6 +815,115 @@
         spawnCollectibles(COLLECTIBLES_COUNT);
         spawnHazards(HAZARD_COUNT);
         spawnEnemies(enemyCount);
+      }
+
+      // --------------------------
+      // Visual extras: Dust, Sweep, Portal glow
+      // --------------------------
+      function makeCircleSprite(size = 64) {
+        const c = document.createElement('canvas'); c.width = size; c.height = size;
+        const g = c.getContext('2d');
+        const gr = g.createRadialGradient(size / 2, size / 2, 1, size / 2, size / 2, size / 2);
+        gr.addColorStop(0, 'rgba(255,255,255,0.9)');
+        gr.addColorStop(0.35, 'rgba(255,255,255,0.25)');
+        gr.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = gr; g.fillRect(0, 0, size, size);
+        const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true; tex.anisotropy = 4; return tex;
+      }
+
+      function setupDustMotes(cols, rows) {
+        // remove previous
+        if (dustPoints) { scene.remove(dustPoints); dustPoints.geometry.dispose?.(); dustPoints.material.dispose?.(); dustPoints = null; }
+        dustData = [];
+        const count = Math.min(400, cols * rows * 3);
+        const geo = new THREE.BufferGeometry();
+        const positions = new Float32Array(count * 3);
+        const sizes = new Float32Array(count);
+        for (let i = 0; i < count; i++) {
+          positions[i * 3 + 0] = (Math.random() * cols) * CELL_SIZE;
+          positions[i * 3 + 1] = Math.random() * (WALL_HEIGHT * 0.95) + 0.1;
+          positions[i * 3 + 2] = (Math.random() * rows) * CELL_SIZE;
+          sizes[i] = 0.08 + Math.random() * 0.18;
+          dustData.push({ vx: (Math.random() - 0.5) * 0.12, vy: (Math.random() - 0.5) * 0.06 });
+        }
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const mat = new THREE.PointsMaterial({
+          size: 0.6,
+          map: makeCircleSprite(64),
+          transparent: true,
+          depthWrite: false,
+          opacity: 0.18,
+          sizeAttenuation: true,
+          color: new THREE.Color(0xcfffe9)
+        });
+        dustPoints = new THREE.Points(geo, mat);
+        dustPoints.position.set(CELL_SIZE / 2, 0, CELL_SIZE / 2);
+        mazeGroup.add(dustPoints);
+      }
+
+      function updateDust(dt) {
+        if (!dustPoints) return;
+        const pos = dustPoints.geometry.getAttribute('position');
+        const count = pos.count;
+        for (let i = 0; i < count; i++) {
+          let x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+          const d = dustData[i];
+          x += d.vx + Math.sin(clock.elapsedTime * 0.5 + i) * 0.005;
+          y += d.vy + Math.sin(clock.elapsedTime * 0.8 + i * 0.5) * 0.004;
+          z += Math.sin(clock.elapsedTime * 0.4 + i * 0.7) * 0.006;
+          // bounds
+          const maxX = (mazeSize - 1) * CELL_SIZE, maxZ = (mazeSize - 1) * CELL_SIZE;
+          if (x < 0) x = maxX; if (x > maxX) x = 0;
+          if (z < 0) z = maxZ; if (z > maxZ) z = 0;
+          if (y < 0.05) y = WALL_HEIGHT * 0.95; if (y > WALL_HEIGHT * 0.95) y = 0.1;
+          pos.setXYZ(i, x, y, z);
+        }
+        pos.needsUpdate = true;
+      }
+
+      function setupLightSweep(cols, rows) {
+        if (sweepMesh) { mazeGroup.remove(sweepMesh); sweepMesh.geometry.dispose?.(); sweepMesh.material.dispose?.(); sweepMesh = null; }
+        // vertical band that moves across X
+        const bandW = CELL_SIZE * 2.5;
+        const geo = new THREE.PlaneGeometry(bandW, WALL_HEIGHT * 1.6);
+        const c = document.createElement('canvas'); c.width = 64; c.height = 256; const g = c.getContext('2d');
+        const grad = g.createLinearGradient(0, 0, 64, 0);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(0.5, 'rgba(180,255,230,0.55)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = grad; g.fillRect(0, 0, 64, 256);
+        const tex = new THREE.CanvasTexture(c); tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.ClampToEdgeWrapping; tex.needsUpdate = true;
+        const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, color: 0xd6ffee });
+        sweepMesh = new THREE.Mesh(geo, mat);
+        sweepMesh.rotation.y = Math.PI / 2; // vertical plane facing X
+        sweepMesh.position.set((cols * CELL_SIZE) / 2, WALL_HEIGHT * 0.9, (rows * CELL_SIZE) / 2);
+        mazeGroup.add(sweepMesh);
+      }
+
+      function updateLightSweep(dt) {
+        if (!sweepMesh) return;
+        // oscillate across the maze
+        const totalW = (mazeSize) * CELL_SIZE;
+        const t = clock.elapsedTime * 0.15;
+        sweepMesh.position.x = (totalW / 2) + Math.sin(t) * (totalW * 0.45);
+        // pulse walls slightly with the sweep
+        const pulse = 0.5 + 0.5 * Math.sin(clock.elapsedTime * 2.0);
+        if (wallIMesh?.material) wallIMesh.material.emissiveIntensity = 0.35 + pulse * 0.25;
+        if (gridHelper?.material) gridHelper.material.opacity = 0.18 + pulse * 0.1;
+      }
+
+      function enhancePortal() {
+        if (!exitPortal) return;
+        // central halo sprite
+        const haloTex = makeCircleSprite(128);
+        for (let i = 0; i < 3; i++) {
+          const sprMat = new THREE.SpriteMaterial({ map: haloTex, color: new THREE.Color(0xff4d8a), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.45 });
+          const spr = new THREE.Sprite(sprMat);
+          spr.scale.set(2.4 + i * 0.6, 2.4 + i * 0.6, 1);
+          spr.position.copy(exitPortal.position).add(new THREE.Vector3(0, 0.4 + i * 0.2, 0));
+          portalSprites.push(spr);
+          mazeGroup.add(spr);
+        }
       }
 
       // --------------------------
@@ -882,11 +1087,32 @@
         // Exit portal rotation
         if (exitPortal) exitPortal.rotation.y += dt * 1.5;
 
-        // Simple float for collectibles
-        for (const c of collectibles) c.position.y = 0.25 + Math.sin(now * 0.002 + c.id) * 0.07;
+        // Simple float for collectibles + emissive pulse
+        const pulse = 0.6 + 0.4 * Math.sin(clock.elapsedTime * 2.4);
+        for (const c of collectibles) {
+          c.position.y = 0.25 + Math.sin(now * 0.002 + c.id) * 0.07;
+          if (c.material) c.material.emissiveIntensity = 0.6 + 0.4 * pulse;
+        }
 
-        // Lights follow player softly
+        // Lights follow player softly and flicker slightly
         pointLight.position.lerp(new THREE.Vector3(yawObject.position.x, 6, yawObject.position.z), 0.08);
+        pointLight.intensity = 0.95 + Math.sin(clock.elapsedTime * 6.5) * 0.05;
+        ambientLight.intensity = 0.32 + Math.sin(clock.elapsedTime * 0.8) * 0.03;
+
+        // Update dust and sweep
+        updateDust(dt);
+        updateLightSweep(dt);
+
+        // Portal halo slow rotation
+        for (let i = 0; i < portalSprites.length; i++) {
+          const s = portalSprites[i];
+          if (!s || !s.material) continue;
+          s.material.opacity = 0.35 + 0.15 * Math.sin(clock.elapsedTime * (1.2 + i * 0.2));
+          // Sprites rotate via material.rotation (in radians)
+          if (typeof s.material.rotation === 'number') {
+            s.material.rotation += 0.002 * (i % 2 === 0 ? 1 : -1);
+          }
+        }
 
         // TF.js sampling
         samplePlayerForAI(dt);
