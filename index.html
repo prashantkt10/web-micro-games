@@ -447,6 +447,18 @@
       <div class="filters" id="categoryFilters"></div>
     </aside>
     <div class="grid">
+      <!-- Game Card: Bike Racer (featured) -->
+      <a class="card" href="games/bike-racer.html" data-difficulty="medium" data-category="Racing">
+        <div class="thumb" data-icon="bike" style="background: radial-gradient(circle at 30% 30%, #00f5d4, #0a7);">
+        </div>
+        <div class="card-title">BIKE RACER</div>
+        <div class="meta">
+          <div class="badge">New</div>
+          <div class="pill">3D Racing</div>
+        </div>
+        <div class="desc">Lean, drift, and race a flowing 3D circuit built with Three.js.</div>
+      </a>
+
       <!-- Game Card: Procedural Maze Runner -->
       <a class="card" href="games/maze-runner.html" data-difficulty="medium" data-category="FPS">
         <div class="thumb" data-icon="maze"></div>
@@ -707,6 +719,23 @@
       }
 
       switch (type) {
+        case 'bike':
+          ring();
+          ctx.lineWidth = 3.5;
+          // wheels
+          ctx.beginPath(); ctx.arc(cx - R * 0.55, cy + R * 0.25, R * 0.3, 0, Math.PI * 2); ctx.stroke();
+          ctx.beginPath(); ctx.arc(cx + R * 0.55, cy + R * 0.25, R * 0.3, 0, Math.PI * 2); ctx.stroke();
+          // frame
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(cx - R * 0.55, cy + R * 0.25);
+          ctx.lineTo(cx - R * 0.1, cy);
+          ctx.lineTo(cx + R * 0.5, cy + R * 0.25);
+          ctx.moveTo(cx - R * 0.1, cy);
+          ctx.lineTo(cx + R * 0.2, cy - R * 0.15);
+          ctx.lineTo(cx + R * 0.6, cy - R * 0.05);
+          ctx.stroke();
+          break;
         case 'maze':
           ring();
           ctx.lineWidth = 3;
@@ -843,6 +872,7 @@
       const title = card.querySelector('.card-title');
       const label = (title?.textContent || '').trim().toLowerCase();
       const map = [
+        ['bike', 'bike'], ['racer', 'bike'], ['race', 'bike'],
         ['maze', 'maze'], ['sky', 'plane'], ['block', 'blocks'], ['quantum', 'drift'], ['heist', 'heist'],
         ['gravity', 'gravity'], ['chrono', 'time'], ['shadow', 'light'], ['orbit', 'orbit'], ['bio', 'dna'],
         ['echo', 'music'], ['vortex', 'vortex'], ['zen', 'zen'], ['particle', 'particles'], ['phase', 'phase']

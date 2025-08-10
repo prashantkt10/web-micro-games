@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <title>Bike Racer</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            background: #060a12;
+            color: #eafff6;
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* HUD */
+        #hud {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            pointer-events: none;
+            z-index: 10;
+            text-shadow: 0 0 10px rgba(0, 255, 166, 0.35);
+        }
+
+        .hud-left,
+        .hud-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .hud-card {
+            background: rgba(0, 0, 0, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 10px;
+            padding: 8px 10px;
+            pointer-events: auto;
+        }
+
+        #healthWrap {
+            width: 180px;
+            height: 10px;
+            border: 1px solid rgba(255, 255, 255, .35);
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, .08);
+        }
+
+        #healthBar {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #00ffa6, #00b3ff);
+            box-shadow: 0 0 12px rgba(0, 255, 166, .55);
+        }
+
+        /* Overlays */
+        .overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            text-align: center;
+            color: #eafff6;
+            z-index: 20;
+            padding: 16px;
+            background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.85));
+        }
+
+        .overlay h1 {
+            margin: 0 0 6px 0;
+            font-weight: 900;
+            letter-spacing: .8px;
+            font-size: 28px;
+            text-shadow: 0 0 18px rgba(0, 255, 166, 0.55);
+        }
+
+        .btn {
+            pointer-events: auto;
+            background: linear-gradient(135deg, #00ffa6, #00b3ff);
+            color: #001b14;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 18px;
+            font-weight: 800;
+            letter-spacing: .6px;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(0, 255, 166, 0.25);
+        }
+
+        .btn:hover {
+            filter: brightness(1.06);
+        }
+    </style>
+    <!-- Core libs (matching other games) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.js"></script>
+    <script src="https://unpkg.com/yuka@0.7.8/build/yuka.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+</head>
+
+<body>
+    <div id="hud">
+        <div class="hud-left">
+            <div class="hud-card">Speed: <span id="speed">0</span> km/h</div>
+            <div class="hud-card">Lap: <span id="lap">1</span></div>
+            <div class="hud-card" style="display:flex; gap:8px; align-items:center;">
+                Health
+                <div id="healthWrap">
+                    <div id="healthBar"></div>
+                </div>
+                <span id="hpText">100</span>
+            </div>
+        </div>
+        <div class="hud-right">
+            <div class="hud-card">Position: <span id="position">1/6</span></div>
+            <div class="hud-card">FPS: <span id="fps">60</span></div>
+        </div>
+    </div>
+
+    <div id="start" class="overlay">
+        <h1>Bike Racer</h1>
+        <p>Lean, drift, and race a flowing 3D circuit with smooth physics and dynamic camera. WASD/Arrows to steer,
+            Space to brake, Shift to boost.</p>
+        <div style="display:flex; gap:10px; margin-top:6px;">
+            <button id="play" class="btn">Tap to Start</button>
+            <a class="btn" href="../index.html" style="text-decoration:none;">Back</a>
+        </div>
+    </div>
+
+    <div id="end" class="overlay" style="display:none;">
+        <h1 id="endTitle">Race Complete</h1>
+        <p id="endDetails"></p>
+        <div style="display:flex; gap:10px; margin-top:6px;">
+            <button id="restart" class="btn">Race Again</button>
+            <a class="btn" href="../index.html" style="text-decoration:none;">Back</a>
+        </div>
+    </div>
+
+    <script>
+        (() => {
+            'use strict';
+            if (!window.THREE) {
+                alert('Three.js failed to load');
+                return;
+            }
+
+            // Shortcuts
+            const {
+                Scene, PerspectiveCamera, WebGLRenderer, Color, FogExp2,
+                Vector2, Vector3, AmbientLight, DirectionalLight,
+                Mesh, MeshStandardMaterial, MeshBasicMaterial,
+                PlaneBufferGeometry, SphereGeometry, BoxBufferGeometry, CylinderBufferGeometry, ConeBufferGeometry,
+                BufferGeometry, Float32BufferAttribute, InstancedMesh, Matrix4, Quaternion,
+                AdditiveBlending, RepeatWrapping, CanvasTexture, SRGBColorSpace, sRGBEncoding
+            } = THREE;
+
+            // DOM
+            const hud = {
+                speed: document.getElementById('speed'),
+                lap: document.getElementById('lap'),
+                position: document.getElementById('position'),
+                fps: document.getElementById('fps'),
+                hpText: document.getElementById('hpText'),
+                hpBar: document.getElementById('healthBar')
+            };
+            const startOverlay = document.getElementById('start');
+            const endOverlay = document.getElementById('end');
+            const endTitle = document.getElementById('endTitle');
+            const endDetails = document.getElementById('endDetails');
+            const playBtn = document.getElementById('play');
+            const restartBtn = document.getElementById('restart');
+
+            // Renderer
+            const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+            renderer.outputColorSpace = (renderer.outputColorSpace || SRGBColorSpace);
+            renderer.outputEncoding = (renderer.outputEncoding || sRGBEncoding);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Scene & camera
+            const scene = new Scene();
+            scene.background = new Color(0x06121a);
+            scene.fog = new FogExp2(0x06121a, 0.015);
+
+            const camera = new PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 1000);
+            scene.add(camera);
+
+            // Lights
+            const ambient = new AmbientLight(0xb7fff0, 0.32); scene.add(ambient);
+            const sun = new DirectionalLight(0xffffff, 0.85);
+            sun.position.set(40, 80, 40);
+            sun.castShadow = true;
+            sun.shadow.mapSize.width = sun.shadow.mapSize.height = 1024;
+            scene.add(sun);
+
+            // Sky dome (gradient)
+            function makeSkyTexture() {
+                const c = document.createElement('canvas'); c.width = 512; c.height = 512; const g = c.getContext('2d');
+                const grad = g.createLinearGradient(0, 0, 0, 512);
+                grad.addColorStop(0, '#0a2a43'); grad.addColorStop(1, '#06121a');
+                g.fillStyle = grad; g.fillRect(0, 0, 512, 512);
+                const tex = new CanvasTexture(c); tex.wrapS = tex.wrapT = RepeatWrapping; tex.needsUpdate = true; return tex;
+            }
+            const sky = new Mesh(new PlaneBufferGeometry(800, 800), new MeshBasicMaterial({ map: makeSkyTexture(), depthWrite: false, fog: false }));
+            sky.rotation.x = -Math.PI / 2; sky.position.y = 200; sky.material.transparent = true; sky.material.opacity = 0.75; scene.add(sky);
+
+            function makeGrassTexture() {
+                const c = document.createElement('canvas'); c.width = 256; c.height = 256; const g = c.getContext('2d');
+                // base
+                g.fillStyle = '#0c2a1e'; g.fillRect(0, 0, 256, 256);
+                // speckle noise
+                for (let i = 0; i < 1200; i++) {
+                    const x = (Math.random() * 256) | 0, y = (Math.random() * 256) | 0;
+                    const a = 0.08 + Math.random() * 0.15; g.fillStyle = `rgba(80,180,120,${a})`;
+                    g.fillRect(x, y, 1, 1);
+                }
+                for (let i = 0; i < 900; i++) {
+                    const x = (Math.random() * 256) | 0, y = (Math.random() * 256) | 0;
+                    const a = 0.05 + Math.random() * 0.12; g.fillStyle = `rgba(40,120,80,${a})`;
+                    g.fillRect(x, y, 1, 1);
+                }
+                const tex = new CanvasTexture(c); tex.wrapS = tex.wrapT = RepeatWrapping; tex.anisotropy = 4; tex.needsUpdate = true; tex.repeat.set(40, 40); return tex;
+            }
+
+            // Ground terrain (procedural grass)
+            const ground = new Mesh(new PlaneBufferGeometry(2000, 2000), new MeshStandardMaterial({ color: 0x1a3a2a, roughness: 0.96, metalness: 0.02, map: makeGrassTexture() }));
+            ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+            // Track generation (closed loop)
+            const TRACK = {
+                segments: 420,
+                radiusX: 120,
+                radiusZ: 90,
+                width: 10,
+                centers: [],
+                tangents: [],
+                normals: [],
+                ups: [],
+                lengthTable: [], // cumulative length for basic speed scaling
+                segLength: [],   // ds per segment
+                kappa: [],       // signed curvature per segment (1/m)
+                bank: [],        // bank angle (rad) per segment (positive leans left)
+            };
+
+            function generateTrack() {
+                const n = TRACK.segments;
+                const rx = TRACK.radiusX, rz = TRACK.radiusZ;
+                const centers = [], ups = [];
+                for (let i = 0; i < n; i++) {
+                    const t = i / n * Math.PI * 2;
+                    // gentle height undulation and small jitter
+                    const y = Math.sin(t * 2.0) * 2.5 + Math.sin(t * 5.0 + 1.7) * 1.2;
+                    const x = Math.cos(t) * rx * (1 + 0.05 * Math.sin(t * 3.1));
+                    const z = Math.sin(t) * rz * (1 + 0.05 * Math.cos(t * 2.6));
+                    centers.push(new Vector3(x, y, z));
+                    ups.push(new Vector3(0, 1, 0));
+                }
+                // compute tangents and normals
+                const tangents = [], normals = [];
+                const tmp = new Vector3();
+                for (let i = 0; i < n; i++) {
+                    const p0 = centers[(i - 1 + n) % n];
+                    const p1 = centers[(i + 1) % n];
+                    const tvec = p1.clone().sub(p0).normalize();
+                    tangents.push(tvec);
+                }
+                for (let i = 0; i < n; i++) {
+                    // lateral normal on XZ plane relative to tangent
+                    const tvec = tangents[i];
+                    const up = ups[i];
+                    const nvec = new Vector3().crossVectors(up, tvec).normalize();
+                    normals.push(nvec);
+                }
+
+                TRACK.centers = centers;
+                TRACK.tangents = tangents;
+                TRACK.normals = normals;
+                TRACK.ups = ups;
+
+                // length table (approx)
+                const len = [0];
+                const segLength = new Array(n);
+                let acc = 0;
+                for (let i = 0; i < n; i++) {
+                    const a = centers[i];
+                    const b = centers[(i + 1) % n];
+                    const ds = a.distanceTo(b) || 1e-3;
+                    segLength[i] = ds;
+                    acc += ds;
+                    len.push(acc);
+                }
+                TRACK.lengthTable = len;
+                TRACK.segLength = segLength;
+
+                // curvature and bank per segment
+                const kappa = new Array(n);
+                const bank = new Array(n);
+                const g = 9.81;
+                const vDesign = 30.0; // m/s (~108 km/h)
+                const maxBank = 0.32; // ~18 deg
+                for (let i = 0; i < n; i++) {
+                    const t0 = tangents[i];
+                    const t1 = tangents[(i + 1) % n];
+                    const dot = Math.max(-1, Math.min(1, t0.dot(t1)));
+                    const angle = Math.acos(dot);
+                    const ds = segLength[i];
+                    const mag = (angle / ds) || 0; // 1/m
+                    // signed using change direction relative to normal
+                    const sign = Math.sign(normals[i].dot(t1.clone().sub(t0)) || 0.00001);
+                    const k = mag * sign;
+                    kappa[i] = k;
+                    const bankAngle = Math.max(0, Math.min(maxBank, Math.atan((vDesign * vDesign * Math.abs(k)) / g) * 0.8));
+                    bank[i] = bankAngle * Math.sign(k);
+                }
+                TRACK.kappa = kappa;
+                TRACK.bank = bank;
+            }
+
+            // Build track ribbon geometry (two strips: asphalt + center line overlay) + props
+            let trackMesh = null, centerLineMesh = null, railMesh = null, curbLeftRed = null, curbLeftWhite = null, curbRightRed = null, curbRightWhite = null, treesTrunk = null, treesCrown = null;
+
+            function buildTrackMeshes() {
+                const n = TRACK.segments;
+                const width = TRACK.width;
+                const centers = TRACK.centers, tangents = TRACK.tangents, normals = TRACK.normals;
+
+                // Track asphalt ribbon
+                const positions = new Float32Array(n * 2 * 3);
+                const uvs = new Float32Array(n * 2 * 2);
+                const indices = new Uint32Array(n * 6);
+
+                const tmpL = new Vector3(), tmpR = new Vector3();
+                for (let i = 0; i < n; i++) {
+                    const c = centers[i];
+                    const side = normals[i];
+                    tmpL.copy(c).addScaledVector(side, -width * 0.5);
+                    tmpR.copy(c).addScaledVector(side, +width * 0.5);
+
+                    // positions (L then R)
+                    const vi = i * 2 * 3; // vec3 per vertex
+                    positions[vi + 0] = tmpL.x; positions[vi + 1] = tmpL.y + 0.02; positions[vi + 2] = tmpL.z;
+                    positions[vi + 3] = tmpR.x; positions[vi + 4] = tmpR.y + 0.02; positions[vi + 5] = tmpR.z;
+
+                    // UVs - tile along length
+                    const ui = i * 2 * 2;
+                    const v = (i / n) * 80; // repeat
+                    uvs[ui + 0] = 0; uvs[ui + 1] = v;
+                    uvs[ui + 2] = 1; uvs[ui + 3] = v;
+
+                    // indices for quad strip
+                    const i0 = i * 2;
+                    const i1 = ((i + 1) % n) * 2;
+                    const ii = i * 6;
+                    indices[ii + 0] = i0; indices[ii + 1] = i0 + 1; indices[ii + 2] = i1;
+                    indices[ii + 3] = i0 + 1; indices[ii + 4] = i1 + 1; indices[ii + 5] = i1;
+                }
+
+                const g = new BufferGeometry();
+                g.setAttribute('position', new Float32BufferAttribute(positions, 3));
+                g.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
+                g.setIndex(new THREE.BufferAttribute(indices, 1));
+                g.computeVertexNormals();
+
+                // Asphalt material with subtle noise texture
+                const tex = (() => {
+                    const c = document.createElement('canvas'); c.width = 256; c.height = 256; const ctx = c.getContext('2d');
+                    ctx.fillStyle = '#1a1f22'; ctx.fillRect(0, 0, 256, 256);
+                    // speckles
+                    for (let i = 0; i < 800; i++) {
+                        const x = (Math.random() * 256) | 0, y = (Math.random() * 256) | 0;
+                        const a = 0.05 + Math.random() * 0.1; ctx.fillStyle = `rgba(255,255,255,${a})`;
+                        ctx.fillRect(x, y, 1, 1);
+                    }
+                    const t = new CanvasTexture(c); t.wrapS = t.wrapT = RepeatWrapping; t.anisotropy = 4; t.needsUpdate = true; return t;
+                })();
+                const asphaltMat = new MeshStandardMaterial({ color: 0x32383f, roughness: 0.95, metalness: 0.02, map: tex });
+                trackMesh = new Mesh(g, asphaltMat);
+                trackMesh.receiveShadow = true; trackMesh.castShadow = false;
+                scene.add(trackMesh);
+
+                // Center line overlay
+                const g2 = g.clone();
+                const dashTex = (() => {
+                    const c = document.createElement('canvas'); c.width = 32; c.height = 256; const ctx = c.getContext('2d');
+                    ctx.clearRect(0, 0, 32, 256);
+                    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+                    for (let y = 0; y < 256; y += 32) { ctx.fillRect(14, y, 4, 16); }
+                    const t = new CanvasTexture(c); t.wrapS = RepeatWrapping; t.wrapT = RepeatWrapping; t.anisotropy = 4; t.needsUpdate = true; return t;
+                })();
+                const centerMat = new MeshBasicMaterial({ map: dashTex, transparent: true, opacity: 0.8 });
+                centerLineMesh = new Mesh(g2, centerMat);
+                centerLineMesh.renderOrder = 2; // draw on top
+                scene.add(centerLineMesh);
+
+                // Guard rails (posts along edges)
+                const postGeo = new CylinderBufferGeometry(0.1, 0.1, 1.2, 8);
+                const postMat = new MeshStandardMaterial({ color: 0xa8fff0, roughness: 0.4, metalness: 0.4, emissive: 0x88ffe0, emissiveIntensity: 0.15 });
+                const postCount = Math.floor(n * 2 * 0.5);
+                railMesh = new InstancedMesh(postGeo, postMat, postCount);
+                railMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+                const mtx = new Matrix4();
+                let idx = 0;
+                for (let i = 0; i < n; i += 2) { // every other segment
+                    const c = centers[i]; const side = normals[i];
+                    const left = c.clone().addScaledVector(side, -width * 0.55);
+                    const right = c.clone().addScaledVector(side, width * 0.55);
+                    [left, right].forEach(p => {
+                        mtx.makeTranslation(p.x, p.y + 0.6, p.z);
+                        railMesh.setMatrixAt(idx++, mtx);
+                    });
+                }
+                railMesh.instanceMatrix.needsUpdate = true;
+                scene.add(railMesh);
+
+                // Curbs along edges (alternating red/white blocks)
+                const curbLen = 1.4, curbH = 0.12, curbW = 0.4;
+                const curbGeo = new BoxBufferGeometry(curbLen, curbH, curbW);
+                const matRed = new MeshStandardMaterial({ color: 0xd11d2b, roughness: 0.6, metalness: 0.2 });
+                const matWhite = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0.2 });
+                const curbCount = Math.floor(n);
+                curbLeftRed = new InstancedMesh(curbGeo, matRed, Math.ceil(curbCount / 2));
+                curbLeftWhite = new InstancedMesh(curbGeo, matWhite, Math.floor(curbCount / 2));
+                curbRightRed = new InstancedMesh(curbGeo, matRed, Math.ceil(curbCount / 2));
+                curbRightWhite = new InstancedMesh(curbGeo, matWhite, Math.floor(curbCount / 2));
+                curbLeftRed.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+                curbLeftWhite.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+                curbRightRed.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+                curbRightWhite.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+                const q = new Quaternion();
+                let ilr = 0, ilw = 0, irr = 0, irw = 0;
+                for (let i = 0; i < n; i++) {
+                    const c = centers[i];
+                    const side = normals[i];
+                    const t = tangents[i];
+                    const yaw = Math.atan2(t.x, t.z);
+                    q.setFromAxisAngle(new Vector3(0, 1, 0), yaw);
+                    const left = c.clone().addScaledVector(side, -width * 0.62);
+                    const right = c.clone().addScaledVector(side, width * 0.62);
+                    mtx.compose(left.clone().add(new Vector3(0, curbH * 0.5, 0)), q, new Vector3(1, 1, 1));
+                    if (i % 2 === 0) curbLeftRed.setMatrixAt(ilr++, mtx); else curbLeftWhite.setMatrixAt(ilw++, mtx);
+                    mtx.compose(right.clone().add(new Vector3(0, curbH * 0.5, 0)), q, new Vector3(1, 1, 1));
+                    if (i % 2 === 0) curbRightWhite.setMatrixAt(irw++, mtx); else curbRightRed.setMatrixAt(irr++, mtx);
+                }
+                curbLeftRed.instanceMatrix.needsUpdate = true;
+                curbLeftWhite.instanceMatrix.needsUpdate = true;
+                curbRightRed.instanceMatrix.needsUpdate = true;
+                curbRightWhite.instanceMatrix.needsUpdate = true;
+                scene.add(curbLeftRed, curbLeftWhite, curbRightRed, curbRightWhite);
+
+                // Trees along outer verges
+                const trunkGeo = new CylinderBufferGeometry(0.12, 0.16, 2.2, 8);
+                const crownGeo = new ConeBufferGeometry(0.8, 1.8, 10);
+                const trunkMat = new MeshStandardMaterial({ color: 0x6b4423, roughness: 0.9, metalness: 0.05 });
+                const crownMat = new MeshStandardMaterial({ color: 0x2e8b57, roughness: 0.8, metalness: 0.1 });
+                const treeEvery = 6;
+                const treeCount = Math.floor(n / treeEvery) * 2; // both sides
+                treesTrunk = new InstancedMesh(trunkGeo, trunkMat, treeCount);
+                treesCrown = new InstancedMesh(crownGeo, crownMat, treeCount);
+                treesTrunk.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+                treesCrown.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+                let ti = 0;
+                for (let i = 0; i < n; i += treeEvery) {
+                    const c = centers[i]; const side = normals[i]; const t = tangents[i];
+                    const yaw = Math.atan2(t.x, t.z);
+                    const dist = width * (1.6 + Math.random() * 1.6);
+                    const left = c.clone().addScaledVector(side, -dist);
+                    const right = c.clone().addScaledVector(side, dist);
+                    const scl = 0.9 + Math.random() * 0.6;
+                    [left, right].forEach(p => {
+                        q.setFromAxisAngle(new Vector3(0, 1, 0), yaw);
+                        mtx.compose(p.clone().add(new Vector3(0, 1.1, 0)), q, new Vector3(1, 1, 1));
+                        treesTrunk.setMatrixAt(ti, mtx);
+                        mtx.compose(p.clone().add(new Vector3(0, 2.2, 0)), q, new Vector3(scl, scl, scl));
+                        treesCrown.setMatrixAt(ti, mtx);
+                        ti++;
+                    });
+                }
+                treesTrunk.instanceMatrix.needsUpdate = true;
+                treesCrown.instanceMatrix.needsUpdate = true;
+                scene.add(treesTrunk, treesCrown);
+            }
+
+            // Utility: sample track frame at floating index s (0..segments)
+            function sampleTrackFrame(s) {
+                const n = TRACK.segments;
+                let i0 = Math.floor(s) % n; if (i0 < 0) i0 += n;
+                const i1 = (i0 + 1) % n;
+                const a = s - Math.floor(s);
+                const c = TRACK.centers[i0].clone().lerp(TRACK.centers[i1], a);
+                const t = TRACK.tangents[i0].clone().lerp(TRACK.tangents[i1], a).normalize();
+                const baseUp = new Vector3(0, 1, 0);
+                const baseN = new Vector3().crossVectors(baseUp, t).normalize();
+                const bank = (TRACK.bank[i0] || 0) * (1 - a) + (TRACK.bank[i1] || 0) * a;
+                const q = new Quaternion().setFromAxisAngle(t, bank);
+                const up = baseUp.clone().applyQuaternion(q).normalize();
+                const nrm = baseN.clone().applyQuaternion(q).normalize();
+                const kappa = (TRACK.kappa[i0] || 0) * (1 - a) + (TRACK.kappa[i1] || 0) * a;
+                const ds = (TRACK.segLength[i0] || 1);
+                const grade = (TRACK.centers[i1].y - TRACK.centers[i0].y) / Math.max(1e-3, TRACK.segLength[i0]);
+                return { c, t, n: nrm, up, bank, kappa, ds, grade };
+            }
+
+            // Bike model (procedural)
+            function createBike(color = 0xa8e6ff) {
+                const group = new THREE.Group();
+                // Wheels
+                const wheelR = 0.36, wheelW = 0.16;
+                const tireMat = new MeshStandardMaterial({ color: 0x111111, roughness: 0.9, metalness: 0.05 });
+                const rimMat = new MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.6, emissive: color, emissiveIntensity: 0.1 });
+                const tireGeo = new CylinderBufferGeometry(wheelR, wheelR, wheelW, 18, 1, true);
+                const rimGeo = new CylinderBufferGeometry(wheelR * 0.8, wheelR * 0.8, wheelW * 0.6, 16);
+                tireGeo.rotateZ(Math.PI / 2); rimGeo.rotateZ(Math.PI / 2);
+                const wFront = new Mesh(tireGeo, tireMat); const wFrontRim = new Mesh(rimGeo, rimMat);
+                const wRear = new Mesh(tireGeo.clone(), tireMat.clone()); const wRearRim = new Mesh(rimGeo.clone(), rimMat.clone());
+                const wheelGap = 1.15;
+                wFront.position.x = +wheelGap / 2; wRear.position.x = -wheelGap / 2; wFrontRim.position.copy(wFront.position); wRearRim.position.copy(wRear.position);
+                wFront.castShadow = wRear.castShadow = true; wFront.receiveShadow = wRear.receiveShadow = true;
+                group.add(wFront, wRear, wFrontRim, wRearRim);
+
+                // Frame
+                const frame = new THREE.Group();
+                const tubeMat = new MeshStandardMaterial({ color: 0x88ffee, roughness: 0.6, metalness: 0.65, emissive: 0x38ffe6, emissiveIntensity: 0.15 });
+                const tube = (l, r = 0.05) => new Mesh(new CylinderBufferGeometry(r, r, l, 10), tubeMat);
+                // Top tube
+                const top = tube(0.9); top.position.set(0.05, 0.55, 0); top.rotation.z = Math.PI / 2.8; frame.add(top);
+                // Down tube
+                const down = tube(0.8); down.position.set(-0.2, 0.35, 0); down.rotation.z = -Math.PI / 3.0; frame.add(down);
+                // Seat tube
+                const seat = tube(0.7); seat.position.set(-0.45, 0.35, 0); seat.rotation.z = Math.PI / 2; frame.add(seat);
+                // Fork
+                const fork = tube(0.7); fork.position.set(0.56, 0.36, 0); fork.rotation.z = -Math.PI / 2.5; frame.add(fork);
+                // Handlebar + simple steering head
+                const bar = tube(0.55, 0.04); bar.position.set(0.76, 0.54, 0); bar.rotation.z = Math.PI / 2; frame.add(bar);
+                const steerHead = tube(0.16, 0.06); steerHead.position.set(0.6, 0.48, 0); steerHead.rotation.z = 0; frame.add(steerHead);
+                // Seat
+                const seatPad = new Mesh(new BoxBufferGeometry(0.22, 0.06, 0.18), new MeshStandardMaterial({ color: 0x222831, roughness: 0.7, metalness: 0.2 }));
+                seatPad.position.set(-0.57, 0.7, 0); frame.add(seatPad);
+                // Engine/box
+                const midBox = new Mesh(new BoxBufferGeometry(0.25, 0.18, 0.18), new MeshStandardMaterial({ color: 0x2a3a42, roughness: 0.8, metalness: 0.35 }));
+                midBox.position.set(-0.1, 0.4, 0); frame.add(midBox);
+                // Headlight sprite
+                const headLight = new THREE.SpotLight(0xcfffe6, 1.2, 20, Math.PI / 6, 0.4, 1.5);
+                headLight.position.set(0.9, 0.6, 0);
+                headLight.target.position.set(2, 0.3, 0);
+                const lightGroup = new THREE.Group(); lightGroup.add(headLight); lightGroup.add(headLight.target); frame.add(lightGroup);
+
+                frame.castShadow = true; frame.receiveShadow = false;
+                group.add(frame);
+
+                // Rider (simple stylized human)
+                const rider = new THREE.Group();
+                const skin = new MeshStandardMaterial({ color: 0xffe0c0, roughness: 0.7, metalness: 0.05 });
+                const cloth = new MeshStandardMaterial({ color: 0x1e2d3a, roughness: 0.8, metalness: 0.1 });
+                const limb = (len, r = 0.06, mat = cloth) => new Mesh(new CylinderBufferGeometry(r, r, len, 10), mat);
+                const torso = new Mesh(new BoxBufferGeometry(0.22, 0.32, 0.14), cloth); torso.position.set(-0.38, 0.86, 0);
+                const riderHead = new Mesh(new SphereGeometry(0.1, 16, 12), skin); riderHead.position.set(-0.38, 1.08, 0);
+                // Arms
+                const armL = limb(0.32, 0.05, cloth); armL.position.set(-0.25, 0.94, 0.1); armL.rotation.z = Math.PI / 4;
+                const armR = limb(0.32, 0.05, cloth); armR.position.set(-0.25, 0.94, -0.1); armR.rotation.z = Math.PI / 4;
+                // Legs
+                const legL = limb(0.36, 0.06, cloth); legL.position.set(-0.50, 0.7, 0.08); legL.rotation.z = Math.PI / 6;
+                const legR = limb(0.36, 0.06, cloth); legR.position.set(-0.50, 0.7, -0.08); legR.rotation.z = Math.PI / 6;
+                rider.add(torso, riderHead, armL, armR, legL, legR);
+                group.add(rider);
+
+                group.userData = {
+                    wFront, wRear,
+                    wheelR,
+                    rider: { group: rider, torso, head: riderHead, armL, armR, legL, legR }
+                };
+                return group;
+            }
+
+            // Player and opponents
+            const player = {
+                bike: createBike(0xa8fff0),
+                s: 0, // param along track (segment float)
+                offset: 0, // lateral offset (-w/2 .. +w/2)
+                targetOffset: 0,
+                speed: 0, // units/s along curve
+                health: 100,
+                lap: 1,
+            };
+            player.bike.position.y = 0.36; scene.add(player.bike);
+
+            const bots = [];
+            function spawnBots(count = 5) {
+                for (let i = 0; i < count; i++) {
+                    const col = new THREE.Color().setHSL((i / count) * 0.8, 0.8, 0.65).getHex();
+                    const b = createBike(col);
+                    scene.add(b);
+                    bots.push({ bike: b, s: (i * TRACK.segments / count) % TRACK.segments, offset: (Math.random() * 0.6 - 0.3) * (TRACK.width * 0.6), speed: 38 + Math.random() * 8, lap: 1 });
+                }
+            }
+
+            // Particles: speed lines ahead of camera and dust from wheels
+            const speedPoints = (() => {
+                const count = 800;
+                const geo = new BufferGeometry();
+                const arr = new Float32Array(count * 3);
+                for (let i = 0; i < count; i++) {
+                    arr[i * 3 + 0] = (Math.random() - 0.5) * 40;
+                    arr[i * 3 + 1] = Math.random() * 10 + 2;
+                    arr[i * 3 + 2] = -Math.random() * 80;
+                }
+                geo.setAttribute('position', new Float32BufferAttribute(arr, 3));
+                const mat = new THREE.PointsMaterial({ color: 0xcffff0, size: 0.08, transparent: true, opacity: 0.35, depthWrite: false, blending: AdditiveBlending });
+                const points = new THREE.Points(geo, mat);
+                camera.add(points);
+                points.position.set(0, -0.6, -1.0);
+                return points;
+            })();
+
+            const dustSystem = (() => {
+                const count = 400;
+                const geo = new BufferGeometry();
+                const arr = new Float32Array(count * 3);
+                const vel = new Float32Array(count * 3);
+                for (let i = 0; i < count; i++) {
+                    arr[i * 3 + 0] = 0; arr[i * 3 + 1] = -999; arr[i * 3 + 2] = 0; // off-screen
+                    vel[i * 3 + 0] = 0; vel[i * 3 + 1] = 0; vel[i * 3 + 2] = 0;
+                }
+                geo.setAttribute('position', new Float32BufferAttribute(arr, 3));
+                const mat = new THREE.PointsMaterial({ color: 0x9ad9c6, size: 0.06, transparent: true, opacity: 0.4, depthWrite: false, blending: AdditiveBlending });
+                const pts = new THREE.Points(geo, mat); scene.add(pts);
+                pts.userData = { vel, head: 0, count };
+                return pts;
+            })();
+
+            // Input
+            const input = { left: false, right: false, accel: false, brake: false, boost: false };
+            document.addEventListener('keydown', (e) => {
+                switch (e.code) {
+                    case 'ArrowLeft': case 'KeyA': input.left = true; break;
+                    case 'ArrowRight': case 'KeyD': input.right = true; break;
+                    case 'ArrowUp': case 'KeyW': input.accel = true; break;
+                    case 'ArrowDown': case 'KeyS': input.brake = true; break;
+                    case 'ShiftLeft': case 'ShiftRight': input.boost = true; break;
+                    case 'Space': input.brake = true; break;
+                }
+            });
+            document.addEventListener('keyup', (e) => {
+                switch (e.code) {
+                    case 'ArrowLeft': case 'KeyA': input.left = false; break;
+                    case 'ArrowRight': case 'KeyD': input.right = false; break;
+                    case 'ArrowUp': case 'KeyW': input.accel = false; break;
+                    case 'ArrowDown': case 'KeyS': input.brake = false; break;
+                    case 'ShiftLeft': case 'ShiftRight': input.boost = false; break;
+                    case 'Space': input.brake = false; break;
+                }
+            });
+
+            // Game state
+            let running = false;
+            let last = performance.now();
+            let fpsFrames = 0, fpsAcc = 0, fps = 60;
+
+            playBtn.addEventListener('click', begin);
+            restartBtn.addEventListener('click', () => { location.reload(); });
+
+            function begin() {
+                if (running) return;
+                startOverlay.style.display = 'none';
+                running = true;
+                last = performance.now();
+            }
+
+            function end(win) {
+                running = false;
+                endTitle.textContent = win ? 'Race Complete' : 'Crash!';
+                const place = computePlayerPlace();
+                endDetails.textContent = `Final: ${place}/${bots.length + 1}  Lap ${player.lap}`;
+                endOverlay.style.display = 'flex';
+            }
+
+            // Setup world
+            generateTrack();
+            buildTrackMeshes();
+            spawnBots(5);
+
+            // Camera initial
+            camera.position.set(0, 1.8, 3.6);
+            camera.lookAt(0, 0.8, 0);
+
+            // Helpers
+            function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
+            function kmh(mps) { return Math.round(mps * 3.6); }
+
+            // Update loop
+            const clock = new THREE.Clock();
+            function loop(now) {
+                requestAnimationFrame(loop);
+                const dt = Math.min(0.033, clock.getDelta());
+
+                if (running) {
+                    updatePlayer(dt);
+                    updateBots(dt);
+                    updateDust(dt);
+                    updateCamera(dt);
+                    updateHUD();
+                }
+
+                renderer.render(scene, camera);
+
+                // FPS
+                fpsFrames++; fpsAcc += dt * 1000; if (fpsAcc >= 1000) { fps = fpsFrames; fpsFrames = 0; fpsAcc = 0; if (hud.fps) hud.fps.textContent = String(fps); }
+            }
+            requestAnimationFrame(loop);
+
+            function updatePlayer(dt) {
+                // Longitudinal dynamics with slope influence and traction limit
+                const baseAcc = 16; // throttle accel m/s^2 scaled
+                const g = 9.81;
+                const mu = 1.1; // dry tarmac friction coefficient (approx)
+                const boost = input.boost ? 1.15 : 1.0;
+                const accCmd = input.accel ? baseAcc : 0;
+                const brakeCmd = input.brake ? 22 : 0;
+                const frame = sampleTrackFrame(player.s);
+                const grade = frame.grade; // dy/ds ~ slope
+                const gravityAlong = g * Math.sin(Math.atan(grade)); // component along path
+                const drag = 4.5 + player.speed * 0.015;
+                let axLong = (accCmd * boost - brakeCmd - drag - gravityAlong); // desired long accel
+                const aLat = (player.speed * player.speed) * Math.abs(frame.kappa); // lateral accel magnitude
+                // friction circle clamp
+                const demand = Math.hypot(axLong / g, aLat / g);
+                let slipping = false;
+                if (demand > mu) {
+                    const scale = mu / demand;
+                    axLong *= scale;
+                    slipping = true;
+                }
+                player.speed += axLong * dt;
+                player.speed = clamp(player.speed, 0, 55 * boost);
+
+                // steering -> lateral offset target
+                const steer = (input.left ? 1 : 0) - (input.right ? 1 : 0);
+                player.targetOffset += steer * dt * 6.0; // steer rate
+                const maxOffset = TRACK.width * 0.42;
+                player.targetOffset = clamp(player.targetOffset, -maxOffset, maxOffset);
+                // relax towards center slowly
+                player.targetOffset *= (1 - 0.6 * dt);
+                // approach target
+                const stiffness = 10.0; // how responsive shift across lane feels
+                player.offset += (player.targetOffset - player.offset) * clamp(stiffness * dt, 0, 1);
+
+                // advance along track
+                const ds = (player.speed * dt) / 2.0; // scale so 1 unit ~ half segment at ~50 m/s
+                const prevS = player.s;
+                player.s = (player.s + ds) % TRACK.segments;
+                if (player.s < prevS) player.lap++;
+
+                // sample frame and place bike
+                const pos = frame.c.clone().addScaledVector(frame.n, player.offset);
+                const up = frame.up;
+                const t = frame.t;
+
+                // orientation & lean: physics-based with track bank
+                const next = sampleTrackFrame(player.s + 1);
+                const curvatureSigned = frame.kappa; // signed 1/m
+                const effectiveLean = Math.atan2((player.speed * player.speed) * Math.abs(curvatureSigned), g) * Math.sign(curvatureSigned);
+                const lean = clamp(effectiveLean - frame.bank + (-player.offset / maxOffset) * 0.25, -0.9, 0.9);
+
+                // Slight chassis bob based on speed
+                const bob = Math.sin(performance.now() * 0.005 + player.s * 0.1) * 0.02 * (player.speed / 50);
+
+                player.bike.position.copy(pos).addScaledVector(up, 0.32 + bob);
+                const yaw = Math.atan2(t.x, t.z);
+                player.bike.rotation.set(0, 0, 0);
+                player.bike.rotation.y = yaw;
+                // pitch squat/nosedive based on longitudinal accel
+                const squat = clamp((-axLong) * 0.01, -0.12, 0.12); // brake -> positive pitch
+                player.bike.rotation.x = squat;
+                player.bike.rotation.z = -lean;
+
+                // Wheels spin
+                const spin = (player.speed * dt) / player.bike.userData.wheelR;
+                player.bike.userData.wFront.rotation.x -= spin;
+                player.bike.userData.wRear.rotation.x -= spin * 1.02;
+
+                // Rider pose reacts to lean and squat
+                const rider = player.bike.userData.rider;
+                if (rider) {
+                    rider.group.rotation.z = -lean * 0.6;
+                    rider.torso.rotation.x = squat * 0.5;
+                    const pedal = performance.now() * 0.004 * (player.speed / 20);
+                    rider.legL.rotation.x = Math.sin(pedal) * 0.4 + 0.2;
+                    rider.legR.rotation.x = Math.sin(pedal + Math.PI) * 0.4 + 0.2;
+                    rider.armL.rotation.x = -0.2 - lean * 0.2;
+                    rider.armR.rotation.x = -0.2 - lean * 0.2;
+                }
+
+                // Dust emission when off-center or braking hard
+                const sideways = Math.abs(player.targetOffset - player.offset);
+                const brakeSkid = input.brake ? 1.0 : 0.0;
+                const slipBonus = slipping ? 8 : 0;
+                const emit = Math.min(16, (sideways * 40 + brakeSkid * 10 + slipBonus) * (player.speed / 40));
+                if (emit > 0.1) emitDust(pos, frame, Math.floor(emit));
+
+                // Collisions with bots
+                for (const bot of bots) {
+                    const f2 = sampleTrackFrame(bot.s);
+                    const bpos = f2.c.clone().addScaledVector(f2.n, bot.offset);
+                    if (bpos.distanceTo(player.bike.position) < 0.7) {
+                        // soft crash: lose speed + health
+                        player.speed *= 0.6; player.health = Math.max(0, player.health - 16);
+                        if (player.health <= 0) end(false);
+                    }
+                }
+            }
+
+            function updateDust(dt) {
+                const pos = dustSystem.geometry.getAttribute('position');
+                const vel = dustSystem.userData.vel;
+                const n = dustSystem.userData.count | 0;
+                for (let i = 0; i < n; i++) {
+                    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+                    if (y < -900) continue; // inactive
+                    const j = i * 3;
+                    const nx = x + vel[j + 0] * dt;
+                    const ny = y + vel[j + 1] * dt - 9.81 * 0.6 * dt; // gravity
+                    const nz = z + vel[j + 2] * dt;
+                    vel[j + 0] *= 0.98; vel[j + 1] *= 0.98; vel[j + 2] *= 0.98;
+                    if (ny < 0) { pos.setXYZ(i, 0, -999, 0); continue; }
+                    pos.setXYZ(i, nx, ny, nz);
+                }
+                pos.needsUpdate = true;
+            }
+
+            function updateBots(dt) {
+                for (const bot of bots) {
+                    // basic speed AI + sinusoidal offset
+                    const base = bot.speed;
+                    const chase = 0.06 * (player.speed - base);
+                    const spd = clamp(base + chase, 20, 54);
+                    bot.s = (bot.s + (spd * dt) / 2.0) % TRACK.segments;
+                    bot.offset = Math.sin((bot.s * 0.04) + (bots.indexOf(bot) * 1.7)) * (TRACK.width * 0.28);
+                    const f = sampleTrackFrame(bot.s);
+                    const pos = f.c.clone().addScaledVector(f.n, bot.offset);
+                    bot.bike.position.copy(pos).add(new Vector3(0, 0.32, 0));
+                    const yaw = Math.atan2(f.t.x, f.t.z);
+                    bot.bike.rotation.y = yaw;
+                    // physics-lean with bank
+                    const g = 9.81;
+                    const effLean = Math.atan2((spd * spd) * Math.abs(f.kappa), g) * Math.sign(f.kappa);
+                    const lean = clamp(effLean - f.bank, -0.8, 0.8);
+                    bot.bike.rotation.z = -lean;
+                    // wheel spin (approx)
+                    const spin = (spd * dt) / bot.bike.userData.wheelR;
+                    bot.bike.userData.wFront.rotation.x -= spin;
+                    bot.bike.userData.wRear.rotation.x -= spin * 1.02;
+
+                    // lap count
+                    if (bot.s < 1 && (bot._prevS || 0) > 1) bot.lap++;
+                    bot._prevS = bot.s;
+                }
+            }
+
+            function emitDust(center, frame, num) {
+                const posAttr = dustSystem.geometry.getAttribute('position');
+                const vel = dustSystem.userData.vel;
+                let head = dustSystem.userData.head | 0;
+                const count = dustSystem.userData.count | 0;
+                const left = center.clone().addScaledVector(frame.n, -0.5).addScaledVector(frame.up, 0.1);
+                const right = center.clone().addScaledVector(frame.n, 0.5).addScaledVector(frame.up, 0.1);
+                for (let i = 0; i < num; i++) {
+                    const p = (Math.random() < 0.5 ? left : right).clone();
+                    p.x += (Math.random() - 0.5) * 0.2; p.z += (Math.random() - 0.5) * 0.2;
+                    const idx = head % count;
+                    posAttr.setXYZ(idx, p.x, p.y, p.z);
+                    const j = idx * 3;
+                    vel[j + 0] = frame.t.x * (-2 - Math.random() * 1.5);
+                    vel[j + 1] = 1 + Math.random() * 1.2;
+                    vel[j + 2] = frame.t.z * (-2 - Math.random() * 1.5);
+                    head++;
+                }
+                dustSystem.userData.head = head;
+                posAttr.needsUpdate = true;
+            }
+
+            function updateCamera(dt) {
+                // follow behind player with smoothing, tilt with lean
+                const frame = sampleTrackFrame(player.s);
+                const pos = frame.c.clone().addScaledVector(frame.n, player.offset);
+                const up = frame.up;
+                const t = frame.t;
+                const back = t.clone().multiplyScalar(-1);
+                const camTarget = pos.clone().addScaledVector(up, 1.4).addScaledVector(back, 3.6).addScaledVector(frame.n, -0.3);
+                camera.position.lerp(camTarget, 1 - Math.exp(-dt * 5));
+                const lookAt = pos.clone().addScaledVector(up, 0.6);
+                camera.lookAt(lookAt);
+                // speed FOV
+                const base = 68; const extra = clamp(player.speed * 0.28, 0, 18);
+                camera.fov += (base + extra - camera.fov) * (1 - Math.exp(-dt * 3));
+                camera.updateProjectionMatrix();
+            }
+
+            function computePlayerPlace() {
+                // sort by progress: lap + s
+                const totals = bots.map(b => (b.lap - 1) * TRACK.segments + b.s);
+                const playerTotal = (player.lap - 1) * TRACK.segments + player.s;
+                let place = 1; for (const t of totals) if (t > playerTotal) place++;
+                return place;
+            }
+
+            function updateHUD() {
+                if (!hud.speed) return;
+                hud.speed.textContent = String(kmh(player.speed));
+                hud.lap.textContent = String(player.lap);
+                hud.position.textContent = `${computePlayerPlace()}/${bots.length + 1}`;
+                hud.hpText.textContent = String(Math.max(0, Math.floor(player.health)));
+                hud.hpBar.style.width = `${clamp(player.health, 0, 100)}%`;
+            }
+
+            // Resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+        })();
+    </script>
+</body>
+
+</html>
