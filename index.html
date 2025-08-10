@@ -443,10 +443,12 @@
         <button class="filter-pill" data-value="medium">Medium</button>
         <button class="filter-pill" data-value="hard">Hard</button>
       </div>
+      <h3 style="margin-top:12px;">Filter by category</h3>
+      <div class="filters" id="categoryFilters"></div>
     </aside>
     <div class="grid">
       <!-- Game Card: Procedural Maze Runner -->
-      <a class="card" href="games/maze-runner.html" data-difficulty="medium">
+      <a class="card" href="games/maze-runner.html" data-difficulty="medium" data-category="FPS">
         <div class="thumb" data-icon="maze"></div>
         <div class="card-title">MAZE RUNNER</div>
         <div class="meta">
@@ -459,7 +461,7 @@
       </a>
 
       <!-- Placeholder future games -->
-      <a class="card" href="games/sky-dodger.html" data-difficulty="easy">
+      <a class="card" href="games/sky-dodger.html" data-difficulty="easy" data-category="Arcade">
         <div class="thumb" data-icon="plane" style="background: radial-gradient(circle at 30% 30%, #f0f, #04a);"></div>
         <div class="card-title">SKY DODGER</div>
         <div class="meta">
@@ -469,19 +471,19 @@
         <div class="desc">Fastpaced aerial dodging. Survive waves, chase high scores.</div>
       </a>
 
-      <a class="card" href="#" data-difficulty="easy" onclick="alert('Coming soon!')">
+      <a class="card" href="games/block-builder.html" data-difficulty="easy" data-category="Sandbox">
         <div class="thumb" data-icon="blocks" style="background: radial-gradient(circle at 30% 30%, #ffb703, #8338ec);">
         </div>
         <div class="card-title">BLOCK BUILDER</div>
         <div class="meta">
           <div class="pill">Sandbox</div>
-          <div class="pill">Coming soon</div>
+          <div class="pill">New</div>
         </div>
         <div class="desc">Relaxing build & explore—craft structures in a minimal voxel world.</div>
       </a>
 
       <!-- New high‑potential concept cards -->
-      <a class="card" href="#" data-difficulty="hard" onclick="alert('Coming soon!')">
+      <a class="card" href="#" data-difficulty="hard" data-category="Racing" onclick="alert('Coming soon!')">
         <div class="thumb" data-icon="drift" style="background: radial-gradient(circle at 30% 30%, #06f, #0f4);"></div>
         <div class="card-title">QUANTUM DRIFT</div>
         <div class="meta">
@@ -492,7 +494,7 @@
           rewritten.</div>
       </a>
 
-      <a class="card" href="#" data-difficulty="hard" onclick="alert('Coming soon!')">
+      <a class="card" href="#" data-difficulty="hard" data-category="Stealth" onclick="alert('Coming soon!')">
         <div class="thumb" data-icon="heist" style="background: radial-gradient(circle at 30% 30%, #ff006e, #00f5d4);">
         </div>
         <div class="card-title">NEON HEIST</div>
@@ -503,7 +505,7 @@
         <div class="desc">Plan, sync, execute. City blocks shuffle layouts mid‑heist—adapt or vanish in neon.</div>
       </a>
 
-      <a class="card" href="#" data-difficulty="medium" onclick="alert('Coming soon!')">
+      <a class="card" href="#" data-difficulty="medium" data-category="Puzzle" onclick="alert('Coming soon!')">
         <div class="thumb" data-icon="gravity"
           style="background: radial-gradient(circle at 30% 30%, #ffd60a, #3a0ca3);"></div>
         <div class="card-title">GRAVITY FLIP</div>
@@ -514,7 +516,7 @@
         <div class="desc">Run a labyrinth where you rotate gravity itself. One gesture, infinite mind‑benders.</div>
       </a>
 
-      <a class="card" href="#" data-difficulty="medium" onclick="alert('Coming soon!')">
+      <a class="card" href="#" data-difficulty="medium" data-category="Roguelite" onclick="alert('Coming soon!')">
         <div class="thumb" data-icon="time" style="background: radial-gradient(circle at 30% 30%, #9b5de5, #00bbf9);">
         </div>
         <div class="card-title">CHRONO SHIFT</div>
@@ -525,7 +527,7 @@
         <div class="desc">Rewind 3 seconds on demand—enemies learn each loop. Outsmart time to break the cycle.</div>
       </a>
 
-      <a class="card" href="#" data-difficulty="hard" onclick="alert('Coming soon!')">
+      <a class="card" href="#" data-difficulty="hard" data-category="Arena" onclick="alert('Coming soon!')">
         <div class="thumb" data-icon="light" style="background: radial-gradient(circle at 30% 30%, #00f, #0ff);"></div>
         <div class="card-title">SHADOW CIRCUIT</div>
         <div class="meta">
@@ -535,7 +537,7 @@
         <div class="desc">Trap swarms with dynamic light. Everything hides or burns in shifting shadows.</div>
       </a>
 
-      <a class="card" href="#" data-difficulty="medium" onclick="alert('Coming soon!')">
+      <a class="card" href="#" data-difficulty="medium" data-category="Strategy" onclick="alert('Coming soon!')">
         <div class="thumb" data-icon="orbit" style="background: radial-gradient(circle at 30% 30%, #48cae4, #03045e);">
         </div>
         <div class="card-title">ORBIT CLASH</div>
@@ -546,7 +548,7 @@
         <div class="desc">Flick fleets and sling worlds with orbital physics. Mini‑RTS meets space marbles.</div>
       </a>
 
-      <a class="card" href="#" data-difficulty="hard" onclick="alert('Coming soon!')">
+      <a class="card" href="#" data-difficulty="hard" data-category="Survival" onclick="alert('Coming soon!')">
         <div class="thumb" data-icon="dna" style="background: radial-gradient(circle at 30% 30%, #52b788, #2d6a4f);">
         </div>
         <div class="card-title">BIOSYNTH ARENA</div>
@@ -557,7 +559,7 @@
         <div class="desc">Grow living weapons mid‑fight. Combine DNA pickups to evolve wild playstyles.</div>
       </a>
 
-      <a class="card" href="#" data-difficulty="easy" onclick="alert('Coming soon!')">
+      <a class="card" href="#" data-difficulty="easy" data-category="Rhythm" onclick="alert('Coming soon!')">
         <div class="thumb" data-icon="music" style="background: radial-gradient(circle at 30% 30%, #ff7a00, #ff00e6);">
         </div>
         <div class="card-title">ECHO RUNNER</div>
@@ -568,7 +570,7 @@
         <div class="desc">Levels build from your music. Dash and shoot perfectly on‑beat to bend the track.</div>
       </a>
 
-      <a class="card" href="#" data-difficulty="easy" onclick="alert('Coming soon!')">
+      <a class="card" href="#" data-difficulty="easy" data-category="Survivor" onclick="alert('Coming soon!')">
         <div class="thumb" data-icon="vortex" style="background: radial-gradient(circle at 30% 30%, #00f5d4, #780000);">
         </div>
         <div class="card-title">VORTEX SURVIVORS</div>
@@ -579,7 +581,7 @@
         <div class="desc">One‑stick chaos around a black hole. Time dilates—so do your builds.</div>
       </a>
 
-      <a class="card" href="#" data-difficulty="hard" onclick="alert('Coming soon!')">
+      <a class="card" href="#" data-difficulty="hard" data-category="Puzzle" onclick="alert('Coming soon!')">
         <div class="thumb" data-icon="zen" style="background: radial-gradient(circle at 30% 30%, #a8dadc, #1d3557);">
         </div>
         <div class="card-title">ZEN SLICE</div>
@@ -590,7 +592,7 @@
         <div class="desc">Slice living fractals with perfect symmetry. Satisfying visuals, deceptively deep.</div>
       </a>
 
-      <a class="card" href="#" onclick="alert('Coming soon!')">
+      <a class="card" href="#" data-category="Creative" onclick="alert('Coming soon!')">
         <div class="thumb" data-icon="particles"
           style="background: radial-gradient(circle at 30% 30%, #06d6a0, #26547c);"></div>
         <div class="card-title">PARTICLE PAINTER</div>
@@ -601,7 +603,7 @@
         <div class="desc">Paint with a billion sparks. Solve goals by sculpting flows and fields.</div>
       </a>
 
-      <a class="card" href="#" onclick="alert('Coming soon!')">
+      <a class="card" href="#" data-category="Metroidvania" onclick="alert('Coming soon!')">
         <div class="thumb" data-icon="phase" style="background: radial-gradient(circle at 30% 30%, #ff4d6d, #2ec4b6);">
         </div>
         <div class="card-title">PHASE SHIFT</div>
@@ -620,24 +622,60 @@
 
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
-    // Difficulty filter logic
-    const filterWrap = document.getElementById('difficultyFilters');
+    // Combined filter logic: difficulty + category
+    const difficultyWrap = document.getElementById('difficultyFilters');
+    const categoryWrap = document.getElementById('categoryFilters');
     const cards = Array.from(document.querySelectorAll('.grid .card'));
-    function applyFilter(value) {
-      cards.forEach(card => {
-        const diff = card.getAttribute('data-difficulty') || 'medium';
-        const visible = (value === 'all') || (diff === value);
-        card.style.display = visible ? '' : 'none';
+
+    // Build category buttons dynamically from cards
+    const categories = Array.from(new Set(cards.map(c => (c.getAttribute('data-category') || 'Other').trim()))).sort();
+    if (categoryWrap) {
+      const allBtn = document.createElement('button');
+      allBtn.className = 'filter-pill';
+      allBtn.textContent = 'All';
+      allBtn.setAttribute('data-value', 'all');
+      allBtn.setAttribute('data-active', 'true');
+      categoryWrap.appendChild(allBtn);
+      categories.forEach(cat => {
+        const b = document.createElement('button');
+        b.className = 'filter-pill';
+        b.textContent = cat;
+        b.setAttribute('data-value', cat);
+        categoryWrap.appendChild(b);
       });
     }
-    filterWrap?.addEventListener('click', (e) => {
+
+    let state = { difficulty: 'all', category: 'all' };
+
+    function applyFilters() {
+      cards.forEach(card => {
+        const diff = (card.getAttribute('data-difficulty') || 'medium').toLowerCase();
+        const cat = (card.getAttribute('data-category') || 'other');
+        const matchesDiff = state.difficulty === 'all' || diff === state.difficulty;
+        const matchesCat = state.category === 'all' || cat === state.category;
+        card.style.display = (matchesDiff && matchesCat) ? '' : 'none';
+      });
+    }
+
+    function setActive(container, btn) {
+      Array.from(container.querySelectorAll('.filter-pill')).forEach(b => b.removeAttribute('data-active'));
+      btn.setAttribute('data-active', 'true');
+    }
+
+    difficultyWrap?.addEventListener('click', (e) => {
       const btn = e.target.closest('.filter-pill');
       if (!btn) return;
-      const value = btn.getAttribute('data-value');
-      // toggle active UI
-      Array.from(filterWrap.querySelectorAll('.filter-pill')).forEach(b => b.removeAttribute('data-active'));
-      btn.setAttribute('data-active', 'true');
-      applyFilter(value);
+      state.difficulty = (btn.getAttribute('data-value') || 'all').toLowerCase();
+      setActive(difficultyWrap, btn);
+      applyFilters();
+    });
+
+    categoryWrap?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.filter-pill');
+      if (!btn) return;
+      state.category = btn.getAttribute('data-value') || 'all';
+      setActive(categoryWrap, btn);
+      applyFilters();
     });
 
     // Icon generation per card using Canvas
