@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <title>Sky Dodger</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            background: #031225;
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+            color: #e9f7ff;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* HUD */
+        #hud {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            right: 12px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 5;
+            pointer-events: none;
+            text-shadow: 0 2px 10px rgba(0, 36, 72, 0.55);
+        }
+
+        .hud-left,
+        .hud-right {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .hud-card {
+            background: rgba(3, 22, 48, 0.35);
+            border: 1px solid rgba(160, 220, 255, 0.25);
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 14px;
+            letter-spacing: 0.4px;
+        }
+
+        #healthWrap {
+            width: 200px;
+            height: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        #healthBar {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #a8ffec, #74d3ff);
+            box-shadow: 0 0 12px rgba(142, 230, 255, 0.65);
+        }
+
+        /* Overlays */
+        .overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            text-align: center;
+            color: #e3f6ff;
+            z-index: 10;
+            background: radial-gradient(ellipse at center, rgba(2, 18, 36, 0.58), rgba(2, 18, 36, 0.88));
+            padding: 16px;
+        }
+
+        .overlay h1 {
+            margin: 0 0 6px 0;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            font-size: 28px;
+            text-shadow: 0 0 16px rgba(120, 210, 255, 0.65);
+        }
+
+        .btn {
+            pointer-events: auto;
+            background: linear-gradient(135deg, #a8ffec, #56c2ff);
+            color: #06243a;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 18px;
+            font-weight: 800;
+            letter-spacing: .6px;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(86, 194, 255, 0.35);
+        }
+
+        .btn:hover {
+            filter: brightness(1.06);
+        }
+
+        /* Mobile control hint */
+        #touchHint {
+            position: fixed;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(3, 22, 48, 0.4);
+            border: 1px solid rgba(160, 220, 255, 0.25);
+            color: #cfefff;
+            font-size: 12px;
+            border-radius: 999px;
+            padding: 6px 10px;
+            z-index: 6;
+            pointer-events: none;
+        }
+
+        a,
+        a:visited {
+            color: #a8e7ff;
+        }
+    </style>
+    <!-- TensorFlow.js for lightweight AI adaptation (optional) -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.18.0/dist/tf.min.js"></script>
+</head>
+
+<body>
+    <canvas id="game"></canvas>
+
+    <div id="hud">
+        <div class="hud-left">
+            <div class="hud-card">Score: <span id="score">0</span></div>
+            <div class="hud-card">Distance: <span id="dist">0</span> km</div>
+            <div class="hud-card" style="display:flex; gap:8px; align-items:center;">
+                Health
+                <div id="healthWrap">
+                    <div id="healthBar"></div>
+                </div>
+                <span id="hpText">100</span>
+            </div>
+        </div>
+        <div class="hud-right">
+            <div class="hud-card">Best: <span id="best">0</span></div>
+            <div class="hud-card" id="mult" style="display:none;">x1.0</div>
+            <div class="hud-card" id="ai">AI: Adaptive</div>
+        </div>
+    </div>
+
+    <div id="touchHint" style="display:none;">Drag to fly. Lift to glide.</div>
+
+    <div id="start" class="overlay">
+        <h1>Sky Dodger</h1>
+        <p>Carve the wind and dodge the sky. Bank smoothly through clouds, avoid hazards, and chase a perfect run.</p>
+        <p style="opacity:.85;">Desktop: WASD or Arrow Keys. Hold Shift to boost. Mobile: Drag to steer.</p>
+        <div style="display:flex; gap:10px; margin-top:6px;">
+            <button class="btn" id="play">Tap to Start</button>
+            <a class="btn" href="../index.html" style="text-decoration:none;">Back</a>
+        </div>
+    </div>
+
+    <div id="end" class="overlay" style="display:none;">
+        <h1 id="endTitle">Run Complete</h1>
+        <p id="endDetails"></p>
+        <div style="display:flex; gap:10px; margin-top:6px;">
+            <button class="btn" id="restart">Play Again</button>
+            <a class="btn" href="../index.html" style="text-decoration:none;">Back</a>
+        </div>
+    </div>
+
+    <script>
+        'use strict';
+        const STORAGE = { best: 'sd_best_score' };
+
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+        let width = 0, height = 0;
+        function resize() {
+            width = Math.floor(window.innerWidth);
+            height = Math.floor(window.innerHeight);
+            canvas.width = Math.floor(width * dpr);
+            canvas.height = Math.floor(height * dpr);
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        const hud = {
+            score: document.getElementById('score'),
+            dist: document.getElementById('dist'),
+            best: document.getElementById('best'),
+            hpText: document.getElementById('hpText'),
+            hpBar: document.getElementById('healthBar'),
+            mult: document.getElementById('mult'),
+            ai: document.getElementById('ai')
+        };
+        hud.best.textContent = localStorage.getItem(STORAGE.best) || '0';
+
+        const startOverlay = document.getElementById('start');
+        const endOverlay = document.getElementById('end');
+        const endTitle = document.getElementById('endTitle');
+        const endDetails = document.getElementById('endDetails');
+        const playBtn = document.getElementById('play');
+        const restartBtn = document.getElementById('restart');
+        const touchHint = document.getElementById('touchHint');
+
+        const isMobile = /Mobi|Android|iPad|iPhone/i.test(navigator.userAgent);
+        if (isMobile) touchHint.style.display = 'block';
+
+        const rnd = (min, max) => min + Math.random() * (max - min);
+        const irnd = (min, max) => Math.floor(rnd(min, max));
+        const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+        const lerp = (a, b, t) => a + (b - a) * t;
+        const ease = (t) => 1 - Math.pow(1 - t, 3);
+
+        // World wind and difficulty
+        const world = {
+            time: 0,
+            speed: 260, // forward speed km/h for display
+            scroll: 220, // px/s background parallax base
+            gust: 0,
+            difficulty: 1,
+            score: 0,
+            distanceKm: 0,
+            health: 100,
+            multiplier: 1,
+            nearMissTimer: 0,
+            alive: false,
+            over: false
+        };
+
+        // Player aircraft
+        const plane = {
+            x: 0.35,
+            y: 0.5,
+            vx: 0,
+            vy: 0,
+            ax: 0,
+            ay: 0,
+            bank: 0,
+            pitch: 0,
+            boost: 0,
+            targetX: 0.35,
+            targetY: 0.5
+        };
+
+        // Input
+        const input = { left: false, right: false, up: false, down: false, boost: false, pointerActive: false, px: 0, py: 0 };
+        document.addEventListener('keydown', (e) => {
+            switch (e.code) {
+                case 'ArrowLeft': case 'KeyA': input.left = true; break;
+                case 'ArrowRight': case 'KeyD': input.right = true; break;
+                case 'ArrowUp': case 'KeyW': input.up = true; break;
+                case 'ArrowDown': case 'KeyS': input.down = true; break;
+                case 'ShiftLeft': case 'ShiftRight': input.boost = true; break;
+                case 'KeyT': ai.enabled = !ai.enabled; pushFloat(width - 160, 40, ai.enabled ? 'AI Assist ON' : 'AI Assist OFF'); break;
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            switch (e.code) {
+                case 'ArrowLeft': case 'KeyA': input.left = false; break;
+                case 'ArrowRight': case 'KeyD': input.right = false; break;
+                case 'ArrowUp': case 'KeyW': input.up = false; break;
+                case 'ArrowDown': case 'KeyS': input.down = false; break;
+                case 'ShiftLeft': case 'ShiftRight': input.boost = false; break;
+            }
+        });
+
+        function setPointer(active, x, y) {
+            input.pointerActive = active;
+            if (active) { input.px = x; input.py = y; }
+        }
+        canvas.addEventListener('pointerdown', (e) => setPointer(true, e.clientX, e.clientY));
+        canvas.addEventListener('pointermove', (e) => { if (input.pointerActive) { setPointer(true, e.clientX, e.clientY); } });
+        canvas.addEventListener('pointerup', () => setPointer(false));
+        canvas.addEventListener('pointercancel', () => setPointer(false));
+
+        // --- AI Adaptive system ---
+        const ai = {
+            enabled: true,
+            skill: 0.5,              // 0..1
+            assistStrength: 0.4,     // 0..1 (higher when skill low)
+            challengeScale: 1.0,     // scales difficulty/spawn/scroll
+            model: null,
+            timer: 0,
+            samples: [],             // recent feature samples
+            hitsWindow: [],
+            ringsWindow: [],
+            nearMissWindow: []
+        };
+
+        function aiSample(dt, px, py, tx, ty) {
+            const diag = Math.hypot(width, height);
+            const controlError = Math.hypot(tx - px, ty - py) / (diag || 1);
+            const speed = Math.hypot(plane.vx, plane.vy) / 800; // normalized
+            const now = performance.now() * 0.001;
+            ai.samples.push({ t: now, controlError, speed });
+            // keep ~10s window
+            const cutoff = now - 10;
+            ai.samples = ai.samples.filter(s => s.t >= cutoff);
+            ai.hitsWindow = ai.hitsWindow.filter(t => t >= cutoff);
+            ai.ringsWindow = ai.ringsWindow.filter(t => t >= cutoff);
+            ai.nearMissWindow = ai.nearMissWindow.filter(t => t >= cutoff);
+        }
+
+        async function aiEvaluate() {
+            // Aggregate features over window
+            if (ai.samples.length < 5) return;
+            const errAvg = ai.samples.reduce((a, s) => a + s.controlError, 0) / ai.samples.length;
+            const spdAvg = ai.samples.reduce((a, s) => a + s.speed, 0) / ai.samples.length;
+            const hitRate = ai.hitsWindow.length / 10;   // per 10s
+            const ringRate = ai.ringsWindow.length / 10; // per 10s
+            const nearMissRate = ai.nearMissWindow.length / 10;
+
+            // If TF present, use a tiny model to combine signals. Else rule-of-thumb.
+            let skill = 0.5;
+            if (window.tf) {
+                try {
+                    if (!ai.model) {
+                        const m = tf.sequential();
+                        m.add(tf.layers.dense({ units: 6, inputShape: [5], activation: 'relu', kernelInitializer: 'heNormal' }));
+                        m.add(tf.layers.dense({ units: 1, activation: 'sigmoid' }));
+                        m.compile({ optimizer: 'adam', loss: 'binaryCrossentropy' });
+                        ai.model = m;
+                        // quick synthetic shaping data
+                        const xs = tf.tensor2d([
+                            [0.60, 0.10, 0.30, 0.00, 0.05], // high error -> low skill
+                            [0.45, 0.25, 0.20, 0.05, 0.08],
+                            [0.30, 0.35, 0.10, 0.10, 0.14],
+                            [0.20, 0.45, 0.05, 0.16, 0.18],
+                            [0.12, 0.55, 0.02, 0.22, 0.22], // low error, fast, many rings -> high skill
+                        ]);
+                        const ys = tf.tensor2d([0.15, 0.3, 0.55, 0.78, 0.92], [5, 1]);
+                        await ai.model.fit(xs, ys, { epochs: 25, verbose: 0 }).catch(() => { });
+                        xs.dispose(); ys.dispose();
+                    }
+                    const x = tf.tensor2d([[errAvg, spdAvg, hitRate, ringRate, nearMissRate]]);
+                    const y = ai.model.predict(x);
+                    const val = (await y.data())[0];
+                    x.dispose(); y.dispose();
+                    skill = isFinite(val) ? val : 0.5;
+                } catch { skill = 0.5; }
+            } else {
+                // heuristic fallback
+                skill = clamp(0.8 * (ringRate + 0.5 * nearMissRate + spdAvg) - 0.9 * errAvg - 0.8 * hitRate + 0.5, 0, 1);
+            }
+
+            ai.skill = clamp(skill, 0, 1);
+            // Map skill to challenge/assist
+            const targetChallenge = 0.85 + ai.skill * 0.7;  // 0.85..1.55
+            const targetAssist = 0.7 * (1 - ai.skill);      // 0.7..0
+            ai.challengeScale = lerp(ai.challengeScale, targetChallenge, 0.25);
+            ai.assistStrength = lerp(ai.assistStrength, targetAssist, 0.25);
+        }
+
+        function updateAIHud() {
+            if (!hud.ai) return;
+            const assist = ai.enabled ? `Assist ${ai.assistStrength < 0.05 ? 'OFF' : 'ON'}` : 'Assist OFF';
+            hud.ai.textContent = `AI: ${assist}  Skill ${(ai.skill * 100).toFixed(0)}%`;
+        }
+
+        // Offscreen textures
+        function makeCloudSprite(radius, puffs = 6) {
+            const size = Math.ceil(radius * 2);
+            const c = document.createElement('canvas');
+            c.width = size; c.height = size;
+            const g = c.getContext('2d');
+            g.clearRect(0, 0, size, size);
+            const cx = size / 2, cy = size / 2;
+            for (let i = 0; i < puffs; i++) {
+                const ang = Math.PI * 2 * (i / puffs) + rnd(-0.4, 0.4);
+                const r = radius * rnd(0.45, 0.75);
+                const px = cx + Math.cos(ang) * radius * rnd(0.15, 0.55);
+                const py = cy + Math.sin(ang) * radius * rnd(0.12, 0.40);
+                const gr = g.createRadialGradient(px, py, r * 0.15, px, py, r);
+                gr.addColorStop(0, 'rgba(255,255,255,0.9)');
+                gr.addColorStop(1, 'rgba(255,255,255,0.0)');
+                g.fillStyle = gr;
+                g.beginPath(); g.arc(px, py, r, 0, Math.PI * 2); g.fill();
+            }
+            return c;
+        }
+
+        const sprites = {
+            cloudFar: makeCloudSprite(90, 7),
+            cloudMid: makeCloudSprite(120, 8),
+            cloudNear: makeCloudSprite(160, 9)
+        };
+
+        // Sky layers and sun
+        function drawSky(t) {
+            const g = ctx.createLinearGradient(0, 0, 0, height);
+            g.addColorStop(0, '#0a2c59');
+            g.addColorStop(0.45, '#18518f');
+            g.addColorStop(0.9, '#78c1ff');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, width, height);
+
+            const sunX = width * 0.78, sunY = height * 0.22, sunR = Math.min(width, height) * 0.09;
+            const sunG = ctx.createRadialGradient(sunX, sunY, sunR * 0.2, sunX, sunY, sunR);
+            sunG.addColorStop(0, 'rgba(255,255,230,0.95)');
+            sunG.addColorStop(0.6, 'rgba(255,240,180,0.35)');
+            sunG.addColorStop(1, 'rgba(255,220,120,0.0)');
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = sunG; ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2); ctx.fill();
+            ctx.globalCompositeOperation = 'source-over';
+
+            ctx.save();
+            ctx.translate(sunX, sunY);
+            ctx.rotate(Math.sin(t * 0.2) * 0.05);
+            ctx.globalAlpha = 0.25;
+            ctx.fillStyle = 'rgba(255,240,200,0.22)';
+            for (let i = 0; i < 3; i++) {
+                const w = sunR * (2.6 + i);
+                const h = sunR * (0.14 + i * 0.06);
+                ctx.fillRect(-w / 2, -h / 2, w, h);
+            }
+            ctx.restore();
+        }
+
+        // Layered clouds
+        const layers = [
+            { parallax: 0.35, speed: 0.18, alpha: 0.55, density: 6, sprite: 'cloudFar', items: [] },
+            { parallax: 0.6, speed: 0.36, alpha: 0.68, density: 7, sprite: 'cloudMid', items: [] },
+            { parallax: 0.9, speed: 0.72, alpha: 0.82, density: 8, sprite: 'cloudNear', items: [] },
+        ];
+
+        function initClouds() {
+            layers.forEach(layer => {
+                layer.items.length = 0;
+                for (let i = 0; i < layer.density; i++) {
+                    layer.items.push({
+                        x: rnd(0, width),
+                        y: rnd(height * 0.05, height * 0.85),
+                        scale: rnd(0.7, 1.25),
+                        drift: rnd(-0.2, 0.2)
+                    });
+                }
+            });
+        }
+        initClouds();
+
+        function updateClouds(dt) {
+            layers.forEach(layer => {
+                const sp = (world.scroll * layer.speed) * dt * (1 + world.gust * 0.3);
+                layer.items.forEach(it => {
+                    it.x -= sp;
+                    it.y += Math.sin(world.time * 0.5 + it.x * 0.002) * it.drift;
+                    if (it.x < -300) {
+                        it.x = width + rnd(60, 360);
+                        it.y = rnd(height * 0.05, height * 0.85);
+                        it.scale = rnd(0.7, 1.25);
+                    }
+                });
+            });
+        }
+
+        function drawClouds() {
+            layers.forEach(layer => {
+                ctx.globalAlpha = layer.alpha;
+                layer.items.forEach(it => {
+                    const sprite = sprites[layer.sprite];
+                    const w = sprite.width * it.scale;
+                    const h = sprite.height * it.scale * lerp(0.8, 1.1, (it.y / height));
+                    ctx.drawImage(sprite, it.x - w / 2, it.y - h / 2, w, h);
+                });
+            });
+            ctx.globalAlpha = 1;
+        }
+
+        // Obstacles and rings
+        const obstacles = []; // {x,y,r,type,vx,vy,rot}
+        const rings = []; // pickups
+        function spawnObstacle() {
+            const typePick = Math.random();
+            const y = rnd(height * 0.1, height * 0.9);
+            const x = width + rnd(40, 200);
+            if (typePick < 0.5) {
+                obstacles.push({ x, y, r: rnd(22, 36), type: 'drone', vx: rnd(180, 260), vy: rnd(-12, 12), rot: rnd(0, Math.PI * 2) });
+            } else if (typePick < 0.8) {
+                obstacles.push({ x, y, r: rnd(28, 42), type: 'balloon', vx: rnd(120, 180), vy: rnd(-8, 8), rot: 0 });
+            } else {
+                obstacles.push({ x, y, r: rnd(26, 30), type: 'storm', vx: rnd(140, 200), vy: rnd(-20, 20), rot: 0 });
+            }
+        }
+        function spawnRing() {
+            const x = width + rnd(200, 460);
+            const y = rnd(height * 0.2, height * 0.8);
+            rings.push({ x, y, r: 18, vx: rnd(180, 260) });
+        }
+
+        // Contrail particles
+        const particles = []; // {x,y,vx,vy,life,max}
+        function emitContrail(px, py) {
+            for (let i = 0; i < 2; i++) {
+                particles.push({
+                    x: px + rnd(-4, 4),
+                    y: py + rnd(-3, 3),
+                    vx: -world.scroll * 0.9 - rnd(30, 60),
+                    vy: rnd(-12, 12) + world.gust * 8,
+                    life: 0,
+                    max: rnd(0.5, 0.9)
+                });
+            }
+        }
+
+        function updateParticles(dt) {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.life += dt;
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.vx *= 0.995; p.vy *= 0.995;
+                if (p.life > p.max || p.x < -50) particles.splice(i, 1);
+            }
+        }
+        function drawParticles() {
+            for (const p of particles) {
+                const a = 1 - (p.life / p.max);
+                const r = 10 + 26 * (p.life / p.max);
+                const gr = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, r);
+                gr.addColorStop(0, `rgba(255,255,255,${0.22 * a})`);
+                gr.addColorStop(1, 'rgba(255,255,255,0)');
+                ctx.fillStyle = gr;
+                ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+            }
+        }
+
+        // Drawing helpers for entities
+        function drawDrone(x, y, r, rot) {
+            ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+            ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 8;
+            ctx.fillStyle = '#2b2f36'; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#8de1ff'; ctx.beginPath(); ctx.arc(0, 0, r * 0.45, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(-r * 1.4, 0); ctx.lineTo(-r * 0.6, 0); ctx.moveTo(r * 0.6, 0); ctx.lineTo(r * 1.4, 0); ctx.stroke();
+            ctx.restore();
+        }
+        function drawBalloon(x, y, r) {
+            const g = ctx.createRadialGradient(x, y, r * 0.2, x, y, r);
+            g.addColorStop(0, '#ffd4a3'); g.addColorStop(1, '#ff6d6d');
+            ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, r * 0.9, r, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.moveTo(x, y + r * 0.8); ctx.lineTo(x, y + r * 1.5); ctx.stroke();
+            ctx.fillStyle = '#7b4a2f'; ctx.fillRect(x - 6, y + r * 1.5, 12, 8);
+        }
+        function drawStorm(x, y, r, t) {
+            ctx.save(); ctx.translate(x, y);
+            ctx.globalAlpha = 0.9; ctx.drawImage(sprites.cloudNear, -r * 1.6, -r * 1.2, r * 3.2, r * 2.4);
+            ctx.globalAlpha = 1; ctx.strokeStyle = 'rgba(255,255,200,0.8)'; ctx.lineWidth = 2.2;
+            if (Math.sin(t * 6 + x * 0.02) > 0.85) {
+                ctx.beginPath(); ctx.moveTo(0, -r * 0.6); ctx.lineTo(8, -r * 0.1); ctx.lineTo(-6, r * 0.2); ctx.lineTo(6, r * 0.6); ctx.stroke();
+            }
+            ctx.restore();
+        }
+        function drawRing(x, y, r, phase) {
+            ctx.save(); ctx.translate(x, y); ctx.rotate(phase * 2);
+            ctx.strokeStyle = 'rgba(180, 255, 240, 0.9)'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.strokeStyle = 'rgba(100,220,255,0.45)'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(0, 0, r * 1.3, 0, Math.PI * 2); ctx.stroke();
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.restore();
+        }
+
+        // Plane drawing
+        function drawPlane(t) {
+            const px = plane.x * width;
+            const py = plane.y * height;
+            const scale = lerp(0.9, 1.1, (plane.y));
+
+            ctx.save();
+            ctx.translate(px, py);
+            ctx.rotate(plane.bank * 0.6);
+            ctx.scale(scale, scale);
+
+            const bodyLen = 74;
+            const bodyRad = 12;
+            const nose = 16;
+
+            const grad = ctx.createLinearGradient(-bodyLen * 0.2, 0, bodyLen * 0.8, 0);
+            grad.addColorStop(0, '#d9f6ff');
+            grad.addColorStop(0.5, '#8cc9f0');
+            grad.addColorStop(1, '#4aa2d8');
+            ctx.fillStyle = grad;
+
+            ctx.beginPath();
+            ctx.moveTo(-bodyLen * 0.2, -bodyRad);
+            ctx.quadraticCurveTo(bodyLen * 0.35, -bodyRad * 1.1, bodyLen * 0.8, -4);
+            ctx.lineTo(bodyLen * 0.8 + nose, 0);
+            ctx.lineTo(bodyLen * 0.8, 4);
+            ctx.quadraticCurveTo(bodyLen * 0.35, bodyRad * 1.1, -bodyLen * 0.2, bodyRad);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#eaf8ff';
+            ctx.beginPath(); ctx.ellipse(20, -6, 16, 8, 0, 0, Math.PI * 2); ctx.fill();
+
+            ctx.fillStyle = '#4da3da';
+            ctx.beginPath(); ctx.moveTo(-8, 0);
+            ctx.lineTo(-44, -16);
+            ctx.lineTo(-10, -10);
+            ctx.closePath(); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(-8, 0);
+            ctx.lineTo(-44, 16);
+            ctx.lineTo(-10, 10);
+            ctx.closePath(); ctx.fill();
+
+            const tipOffset = 30;
+            emitContrail(-44, -16);
+            emitContrail(-44, 16);
+            emitContrail(bodyLen * 0.75, 0);
+
+            ctx.restore();
+        }
+
+        // Floating texts
+        const floats = []; // {x,y,text,life,max}
+        function pushFloat(x, y, text) { floats.push({ x, y, text, life: 0, max: 1.2 }); }
+        function updateFloats(dt) { for (let i = floats.length - 1; i >= 0; i--) { const f = floats[i]; f.life += dt; f.y -= 20 * dt; if (f.life > f.max) floats.splice(i, 1); } }
+        function drawFloats() { for (const f of floats) { const a = 1 - (f.life / f.max); ctx.globalAlpha = a; ctx.fillStyle = '#eaffff'; ctx.font = '700 16px system-ui, sans-serif'; ctx.fillText(f.text, f.x, f.y); ctx.globalAlpha = 1; } }
+
+        // Audio beeps
+        let audioCtx = null, masterGain = null;
+        function initAudio() {
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                masterGain = audioCtx.createGain(); masterGain.connect(audioCtx.destination); masterGain.gain.value = 0.08;
+            } catch (e) { /* no audio */ }
+        }
+        function beep(freq = 660, len = 0.06, gain = 0.12) {
+            if (!audioCtx) return;
+            const t = audioCtx.currentTime; const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+            o.type = 'sine'; o.frequency.value = freq; g.gain.value = 0; g.connect(masterGain); o.connect(g);
+            g.gain.linearRampToValueAtTime(gain, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+            o.start(t); o.stop(t + len + 0.02);
+        }
+
+        // Game State
+        let last = performance.now();
+        function reset() {
+            world.time = 0; world.score = 0; world.distanceKm = 0; world.health = 100; world.multiplier = 1; world.nearMissTimer = 0;
+            world.difficulty = 1; world.gust = 0; world.alive = false; world.over = false;
+            plane.x = 0.35; plane.y = 0.5; plane.vx = 0; plane.vy = 0; plane.ax = 0; plane.ay = 0; plane.bank = 0; plane.pitch = 0; plane.boost = 0; plane.targetX = plane.x; plane.targetY = plane.y;
+            obstacles.length = 0; rings.length = 0; particles.length = 0; floats.length = 0; initClouds();
+            updateHUD();
+        }
+        reset();
+
+        function begin() {
+            startOverlay.style.display = 'none';
+            endOverlay.style.display = 'none';
+            if (!audioCtx) initAudio();
+            world.alive = true; world.over = false; last = performance.now();
+            loop(last);
+        }
+        function gameOver() {
+            if (world.over) return; world.over = true; world.alive = false;
+            const best = parseInt(localStorage.getItem(STORAGE.best) || '0', 10);
+            if (world.score > best) { localStorage.setItem(STORAGE.best, String(world.score)); hud.best.textContent = String(world.score); }
+            endTitle.textContent = world.health <= 0 ? 'Winds Overwhelmed You' : 'Flight Complete';
+            endDetails.textContent = `Score ${Math.floor(world.score)}  Distance ${world.distanceKm.toFixed(1)} km  Max x${world.multiplier.toFixed(1)}`;
+            endOverlay.style.display = 'flex';
+        }
+
+        playBtn.addEventListener('click', begin);
+        restartBtn.addEventListener('click', () => { reset(); begin(); });
+
+        document.addEventListener('visibilitychange', () => { if (document.hidden) world.alive = false; else if (!world.over) { last = performance.now(); world.alive = true; loop(last); } });
+
+        function updateHUD() {
+            hud.score.textContent = String(Math.floor(world.score));
+            hud.dist.textContent = world.distanceKm.toFixed(1);
+            hud.hpText.textContent = String(Math.max(0, Math.floor(world.health)));
+            hud.hpBar.style.width = `${clamp(world.health, 0, 100)}%`;
+            if (world.multiplier > 1.01) { hud.mult.style.display = 'block'; hud.mult.textContent = `x${world.multiplier.toFixed(1)}`; } else { hud.mult.style.display = 'none'; }
+            updateAIHud();
+        }
+
+        // Core loop
+        function loop(now) {
+            if (!world.alive) return;
+            const dt = Math.min(0.033, (now - last) / 1000); last = now; world.time += dt;
+
+            world.gust = Math.sin(world.time * 0.6) * 0.3 + Math.sin(world.time * 0.13 + 2.1) * 0.2;
+            const boostFactor = input.boost ? 1.15 : 1.0;
+            const controlAccel = 1000; // px/s^2 (increased for snappier response)
+
+            if (input.pointerActive) {
+                plane.targetX = clamp(input.px / width, 0.06, 0.94);
+                plane.targetY = clamp(input.py / height, 0.08, 0.92);
+            } else {
+                plane.targetX += ((input.right ? 1 : 0) - (input.left ? 1 : 0)) * dt * 1.6;
+                plane.targetY += ((input.down ? 1 : 0) - (input.up ? 1 : 0)) * dt * 1.6;
+                plane.targetX = clamp(plane.targetX, 0.06, 0.94);
+                plane.targetY = clamp(plane.targetY, 0.08, 0.92);
+            }
+
+            const tx = plane.targetX * width, ty = plane.targetY * height;
+            const px = plane.x * width, py = plane.y * height;
+            const dx = tx - px, dy = ty - py;
+            plane.ax = clamp(dx * 10, -controlAccel, controlAccel) + world.gust * 20;
+            plane.ay = clamp(dy * 10, -controlAccel, controlAccel) + Math.sin(world.time * 2.1) * 10;
+
+            // Gentle AI assist steering: attract to nearest ring, repel nearest obstacle
+            if (ai.enabled && ai.assistStrength > 0.01) {
+                let nearestRing = null, nrDist2 = Infinity;
+                for (const r of rings) { const ddx = r.x - px, ddy = r.y - py; const d2 = ddx * ddx + ddy * ddy; if (d2 < nrDist2) { nrDist2 = d2; nearestRing = r; } }
+                let nearestObs = null, noDist2 = Infinity;
+                for (const o of obstacles) { const ddx = o.x - px, ddy = o.y - py; const d2 = ddx * ddx + ddy * ddy; if (d2 < noDist2) { noDist2 = d2; nearestObs = o; } }
+                let axAssist = 0, ayAssist = 0;
+                if (nearestRing) { const d = Math.max(1, Math.hypot(nearestRing.x - px, nearestRing.y - py)); const k = 260 * ai.assistStrength * ease(clamp(400 / d, 0, 1)); axAssist += (nearestRing.x - px) / d * k; ayAssist += (nearestRing.y - py) / d * k; }
+                if (nearestObs) { const d = Math.max(1, Math.hypot(nearestObs.x - px, nearestObs.y - py)); const k = 340 * ai.assistStrength * ease(clamp(300 / d, 0, 1)); axAssist -= (nearestObs.x - px) / d * k; ayAssist -= (nearestObs.y - py) / d * k; }
+                plane.ax += axAssist; plane.ay += ayAssist;
+            }
+
+            plane.vx += plane.ax * dt; plane.vy += plane.ay * dt;
+            plane.vx *= 0.94; plane.vy *= 0.94;
+            plane.x += (plane.vx * dt) / width; plane.y += (plane.vy * dt) / height;
+            plane.x = clamp(plane.x, 0.04, 0.96); plane.y = clamp(plane.y, 0.08, 0.92);
+
+            plane.bank = clamp(-plane.vx / 400, -0.6, 0.6);
+            plane.pitch = clamp(-plane.vy / 600, -0.25, 0.25);
+            plane.boost = lerp(plane.boost, input.boost ? 1 : 0, dt * 3);
+
+            updateClouds(dt * boostFactor);
+
+            // AI-scaled spawns
+            const spawnScale = ai.enabled ? ai.challengeScale : 1.0;
+            if (Math.random() < dt * (0.8 + world.difficulty * 0.5) * spawnScale) spawnObstacle();
+            if (Math.random() < dt * (0.35 + world.difficulty * 0.25) * (1.1 - 0.3 * (ai.skill || 0))) spawnRing();
+
+            const scrollBase = world.scroll * boostFactor * (1 + world.difficulty * 0.08) * spawnScale;
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const o = obstacles[i];
+                o.x -= (scrollBase + o.vx) * dt; o.y += o.vy * dt; o.rot += dt * 4;
+                if (o.y < height * 0.05 || o.y > height * 0.95) o.vy *= -1;
+                if (o.x < -80) obstacles.splice(i, 1);
+            }
+            for (let i = rings.length - 1; i >= 0; i--) { const r = rings[i]; r.x -= (scrollBase + r.vx) * dt; if (r.x < -50) rings.splice(i, 1); }
+
+            updateParticles(dt);
+            updateFloats(dt);
+
+            const pr = 18;
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const o = obstacles[i];
+                const ddx = o.x - px, ddy = o.y - py; const dist2 = ddx * ddx + ddy * ddy;
+                const rr = (o.r + pr);
+                if (dist2 < rr * rr) {
+                    world.health -= 24 * (0.6 + world.difficulty * 0.1);
+                    obstacles.splice(i, 1);
+                    pushFloat(px + 8, py - 18, '-24');
+                    beep(220, 0.08, 0.2);
+                    world.multiplier = Math.max(1, world.multiplier * 0.7);
+                    ai.hitsWindow.push(performance.now() * 0.001);
+                } else if (dist2 < (rr + 26) * (rr + 26)) {
+                    world.nearMissTimer += dt * 2; if (world.nearMissTimer > 0.2) { world.multiplier = Math.min(3.5, world.multiplier + 0.05); world.nearMissTimer = 0; pushFloat(px - 10, py - 26, 'Near Miss'); beep(920, 0.04, 0.12); ai.nearMissWindow.push(performance.now() * 0.001); }
+                }
+            }
+
+            for (let i = rings.length - 1; i >= 0; i--) { const r = rings[i]; const dx = r.x - px, dy = r.y - py; if (dx * dx + dy * dy < (r.r + pr) * (r.r + pr)) { rings.splice(i, 1); world.score += Math.floor(120 * world.multiplier); pushFloat(px + 10, py - 24, `+${Math.floor(120 * world.multiplier)}`); beep(1046, 0.06, 0.16); world.multiplier = Math.min(4.0, world.multiplier + 0.1); ai.ringsWindow.push(performance.now() * 0.001); } }
+
+            world.score += (24 * boostFactor * world.multiplier) * dt * (1 + world.difficulty * 0.2) * spawnScale;
+            world.distanceKm += (world.speed * boostFactor) * dt / 3600 * (width / height * 1.4);
+            world.difficulty += 0.02 * dt;
+
+            // AI: sample + periodic evaluation
+            aiSample(dt, px, py, tx, ty);
+            ai.timer += dt;
+            if (ai.timer > 6) { ai.timer = 0; aiEvaluate().then(updateAIHud).catch(() => { }); }
+
+            if (world.health <= 0) world.alive = false;
+
+            draw(now * 0.001);
+            updateHUD();
+
+            if (world.alive) requestAnimationFrame(loop); else gameOver();
+        }
+
+        function draw(t) {
+            drawSky(t);
+            drawClouds();
+
+            drawParticles();
+
+            for (const r of rings) { drawRing(r.x, r.y, r.r, t); }
+            for (const o of obstacles) {
+                if (o.type === 'drone') drawDrone(o.x, o.y, o.r, o.rot);
+                else if (o.type === 'balloon') drawBalloon(o.x, o.y, o.r);
+                else drawStorm(o.x, o.y, o.r, t);
+            }
+
+            drawPlane(t);
+
+            ctx.save(); ctx.globalAlpha = 0.14 + 0.06 * plane.boost; ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+            ctx.restore();
+
+            drawFloats();
+        }
+
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,820 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Web Games Hub</title>
+  <style>
+    :root {
+      --bg: #070b10;
+      --card: #0f1624;
+      --accent: #00ffa6;
+      --accent2: #00b3ff;
+      --text: #e9fff9;
+      --muted: #a7ffc7;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    html,
+    body {
+      height: 100%
+    }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background: radial-gradient(1200px 800px at 20% -10%, #0b1c14 0, transparent 60%),
+        radial-gradient(1200px 800px at 120% 110%, #0a1430 0, transparent 60%), var(--bg);
+      overflow-x: hidden;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none
+    }
+
+    header {
+      position: relative;
+      padding: 28px 24px 0;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      box-shadow: 0 0 28px rgba(0, 255, 166, .35)
+    }
+
+    .title {
+      font-weight: 800;
+      letter-spacing: .6px;
+      font-size: 22px
+    }
+
+    .subtitle {
+      opacity: .8;
+      margin-top: 6px;
+      max-width: 800px
+    }
+
+    .cta {
+      margin-top: 18px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #001b14;
+      font-weight: 700;
+      box-shadow: 0 12px 30px rgba(0, 255, 166, .25);
+    }
+
+    /* Nice header (top bar + mast) */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      margin: 12px auto 0;
+      max-width: 1200px;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(10, 16, 24, .55);
+      border: 1px solid rgba(255, 255, 255, .06);
+      border-radius: 12px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    .topbar::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -1px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      opacity: .35;
+      border-radius: 0 0 12px 12px;
+      pointer-events: none;
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .nav a {
+      font-weight: 700;
+      opacity: .92;
+      letter-spacing: .2px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+    }
+
+    .nav a:hover {
+      border-color: rgba(255, 255, 255, .12);
+      background: rgba(255, 255, 255, .06);
+    }
+
+    .mast {
+      padding: 16px 24px 0;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .headline {
+      margin: 16px 0 8px;
+      line-height: 1.1;
+      font-size: clamp(26px, 5vw, 44px);
+      font-weight: 900;
+      letter-spacing: .8px;
+      text-shadow: 0 0 24px rgba(0, 255, 166, .22);
+    }
+
+    .cta-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 12px;
+    }
+
+    .cta.alt {
+      background: rgba(255, 255, 255, .06);
+      color: var(--text);
+      box-shadow: none;
+      border: 1px solid rgba(255, 255, 255, .10);
+    }
+
+    .cta.alt:hover {
+      border-color: rgba(0, 255, 166, .35);
+    }
+
+    .hero {
+      position: relative;
+      max-width: 1200px;
+      margin: 24px auto 0;
+      padding: 0 24px 24px;
+    }
+
+    .glow {
+      position: absolute;
+      inset: auto 0 -120px 0;
+      height: 220px;
+      filter: blur(60px);
+      opacity: .35;
+      background: radial-gradient(closest-side at 40% 50%, rgba(0, 255, 166, .6), transparent),
+        radial-gradient(closest-side at 60% 50%, rgba(0, 179, 255, .5), transparent);
+      pointer-events: none;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 16px 24px 40px;
+    }
+
+    /* Layout with left sidebar filters */
+    .gamesLayout {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 18px;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 16px 24px 40px;
+    }
+
+    @media (max-width: 880px) {
+      .gamesLayout {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: static;
+      }
+    }
+
+    .gamesLayout .grid {
+      max-width: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 16px;
+      align-self: start;
+      background: linear-gradient(180deg, rgba(255, 255, 255, .04), rgba(255, 255, 255, .02));
+      border: 1px solid rgba(255, 255, 255, .06);
+      border-radius: 14px;
+      padding: 14px;
+      height: fit-content;
+    }
+
+    .sidebar h3 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      letter-spacing: .6px;
+      opacity: .9;
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .filter-pill {
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, .12);
+      background: rgba(255, 255, 255, .04);
+      color: var(--text);
+      padding: 8px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .filter-pill[data-active="true"],
+    .filter-pill:hover {
+      border-color: rgba(0, 255, 166, .35);
+      box-shadow: 0 6px 18px rgba(0, 255, 166, .18);
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #001b14;
+      font-weight: 800;
+    }
+
+    .card {
+      position: relative;
+      background: linear-gradient(180deg, rgba(255, 255, 255, .04), rgba(255, 255, 255, .02));
+      border: 1px solid rgba(255, 255, 255, .06);
+      border-radius: 16px;
+      overflow: hidden;
+      padding: 16px;
+      isolation: isolate;
+      transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(0, 255, 166, .25);
+      box-shadow: 0 10px 40px rgba(0, 255, 166, .12);
+    }
+
+    .thumb {
+      height: 140px;
+      border-radius: 12px;
+      background: radial-gradient(circle at 30% 30%, #0df, #0a4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #001610;
+      font-weight: 900;
+      letter-spacing: .8px;
+      font-size: 22px;
+      text-shadow: 0 0 14px rgba(255, 255, 255, .35);
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    /* Ensure label sits above decorative layers */
+    .thumb>* {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Graphics overlays: grid + glow + stripes for all cards */
+    .thumb::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(transparent calc(100% - 1px), rgba(255, 255, 255, .10) 1px),
+        linear-gradient(90deg, transparent calc(100% - 1px), rgba(255, 255, 255, .10) 1px);
+      background-size: 24px 24px, 24px 24px;
+      /* grid */
+      opacity: .22;
+      mix-blend-mode: overlay;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .thumb::after {
+      content: "";
+      position: absolute;
+      inset: -40% -40%;
+      background:
+        radial-gradient(closest-side at 70% 30%, rgba(255, 255, 255, .10), rgba(255, 255, 255, 0) 60%),
+        repeating-linear-gradient(45deg, rgba(255, 255, 255, .04) 0 6px, rgba(0, 0, 0, 0) 6px 12px);
+      filter: blur(8px);
+      transform: rotate(12deg) scale(1.1);
+      opacity: .45;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .card:hover .thumb::before {
+      opacity: .33;
+    }
+
+    .card:hover .thumb::after {
+      transform: rotate(20deg) scale(1.2);
+      opacity: .55;
+    }
+
+    /* Canvas icons generated via JS */
+    .thumb-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      opacity: .9;
+      z-index: 0;
+    }
+
+    .meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 12px;
+      gap: 10px
+    }
+
+    .badge {
+      font-size: 12px;
+      color: #001b14;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      padding: 6px 10px;
+      border-radius: 20px;
+      font-weight: 800
+    }
+
+    .pill {
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, .06);
+      border: 1px solid rgba(255, 255, 255, .08)
+    }
+
+    .desc {
+      opacity: .86;
+      font-size: 13px;
+      margin-top: 8px
+    }
+
+    .card-title {
+      margin-top: 10px;
+      font-weight: 900;
+      letter-spacing: .6px;
+      font-size: 18px;
+      text-shadow: 0 0 12px rgba(0, 255, 166, .18);
+    }
+
+    footer {
+      opacity: .75;
+      text-align: center;
+      padding: 24px
+    }
+  </style>
+
+  <!-- Core libs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.js"></script>
+  <script src="https://unpkg.com/yuka@0.7.8/build/yuka.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo"></div>
+      <div class="title">Web Games Hub</div>
+    </div>
+    <nav class="nav">
+      <a href="#games">Games</a>
+      <a href="#news" onclick="alert('News coming soon!')">News</a>
+      <a href="#about" onclick="alert('About coming soon!')">About</a>
+    </nav>
+  </div>
+
+  <header class="mast">
+    <h1 class="headline">Instant-play indie games, right in your browser.</h1>
+    <div class="subtitle">Jump into bite-sized, high-speed web games. New titles drop regularly—bookmark this hub and
+      play in your browser.</div>
+    <div class="cta-row">
+      <a class="cta" href="#games">Play a game</a>
+      <a class="cta alt" href="#" onclick="alert('Subscribe coming soon!')">Subscribe</a>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="glow"></div>
+  </section>
+
+  <section id="games" class="gamesLayout">
+    <aside class="sidebar">
+      <h3>Filter by difficulty</h3>
+      <div class="filters" id="difficultyFilters">
+        <button class="filter-pill" data-value="all" data-active="true">All</button>
+        <button class="filter-pill" data-value="easy">Easy</button>
+        <button class="filter-pill" data-value="medium">Medium</button>
+        <button class="filter-pill" data-value="hard">Hard</button>
+      </div>
+    </aside>
+    <div class="grid">
+      <!-- Game Card: Procedural Maze Runner -->
+      <a class="card" href="games/maze-runner.html" data-difficulty="medium">
+        <div class="thumb" data-icon="maze"></div>
+        <div class="card-title">MAZE RUNNER</div>
+        <div class="meta">
+          <div class="badge">New</div>
+          <div class="pill">3D FPS Procedural</div>
+        </div>
+        <div class="desc">Escape a glowing scifi labyrinth before time runs out. Avoid patrols, collect orbs, and find
+          the
+          portal.</div>
+      </a>
+
+      <!-- Placeholder future games -->
+      <a class="card" href="games/sky-dodger.html" data-difficulty="easy">
+        <div class="thumb" data-icon="plane" style="background: radial-gradient(circle at 30% 30%, #f0f, #04a);"></div>
+        <div class="card-title">SKY DODGER</div>
+        <div class="meta">
+          <div class="pill">Arcade</div>
+          <div class="pill">New</div>
+        </div>
+        <div class="desc">Fastpaced aerial dodging. Survive waves, chase high scores.</div>
+      </a>
+
+      <a class="card" href="#" data-difficulty="easy" onclick="alert('Coming soon!')">
+        <div class="thumb" data-icon="blocks" style="background: radial-gradient(circle at 30% 30%, #ffb703, #8338ec);">
+        </div>
+        <div class="card-title">BLOCK BUILDER</div>
+        <div class="meta">
+          <div class="pill">Sandbox</div>
+          <div class="pill">Coming soon</div>
+        </div>
+        <div class="desc">Relaxing build & explore—craft structures in a minimal voxel world.</div>
+      </a>
+
+      <!-- New high‑potential concept cards -->
+      <a class="card" href="#" data-difficulty="hard" onclick="alert('Coming soon!')">
+        <div class="thumb" data-icon="drift" style="background: radial-gradient(circle at 30% 30%, #06f, #0f4);"></div>
+        <div class="card-title">QUANTUM DRIFT</div>
+        <div class="meta">
+          <div class="pill">Racing</div>
+          <div class="pill">Coming soon</div>
+        </div>
+        <div class="desc">Zero‑G drifting on living tracks that reconfigure in real time. Master the line or get
+          rewritten.</div>
+      </a>
+
+      <a class="card" href="#" data-difficulty="hard" onclick="alert('Coming soon!')">
+        <div class="thumb" data-icon="heist" style="background: radial-gradient(circle at 30% 30%, #ff006e, #00f5d4);">
+        </div>
+        <div class="card-title">NEON HEIST</div>
+        <div class="meta">
+          <div class="pill">Stealth</div>
+          <div class="pill">Coming soon</div>
+        </div>
+        <div class="desc">Plan, sync, execute. City blocks shuffle layouts mid‑heist—adapt or vanish in neon.</div>
+      </a>
+
+      <a class="card" href="#" data-difficulty="medium" onclick="alert('Coming soon!')">
+        <div class="thumb" data-icon="gravity"
+          style="background: radial-gradient(circle at 30% 30%, #ffd60a, #3a0ca3);"></div>
+        <div class="card-title">GRAVITY FLIP</div>
+        <div class="meta">
+          <div class="pill">Puzzle</div>
+          <div class="pill">Coming soon</div>
+        </div>
+        <div class="desc">Run a labyrinth where you rotate gravity itself. One gesture, infinite mind‑benders.</div>
+      </a>
+
+      <a class="card" href="#" data-difficulty="medium" onclick="alert('Coming soon!')">
+        <div class="thumb" data-icon="time" style="background: radial-gradient(circle at 30% 30%, #9b5de5, #00bbf9);">
+        </div>
+        <div class="card-title">CHRONO SHIFT</div>
+        <div class="meta">
+          <div class="pill">Roguelite</div>
+          <div class="pill">Coming soon</div>
+        </div>
+        <div class="desc">Rewind 3 seconds on demand—enemies learn each loop. Outsmart time to break the cycle.</div>
+      </a>
+
+      <a class="card" href="#" data-difficulty="hard" onclick="alert('Coming soon!')">
+        <div class="thumb" data-icon="light" style="background: radial-gradient(circle at 30% 30%, #00f, #0ff);"></div>
+        <div class="card-title">SHADOW CIRCUIT</div>
+        <div class="meta">
+          <div class="pill">Arena</div>
+          <div class="pill">Coming soon</div>
+        </div>
+        <div class="desc">Trap swarms with dynamic light. Everything hides or burns in shifting shadows.</div>
+      </a>
+
+      <a class="card" href="#" data-difficulty="medium" onclick="alert('Coming soon!')">
+        <div class="thumb" data-icon="orbit" style="background: radial-gradient(circle at 30% 30%, #48cae4, #03045e);">
+        </div>
+        <div class="card-title">ORBIT CLASH</div>
+        <div class="meta">
+          <div class="pill">Strategy</div>
+          <div class="pill">Coming soon</div>
+        </div>
+        <div class="desc">Flick fleets and sling worlds with orbital physics. Mini‑RTS meets space marbles.</div>
+      </a>
+
+      <a class="card" href="#" data-difficulty="hard" onclick="alert('Coming soon!')">
+        <div class="thumb" data-icon="dna" style="background: radial-gradient(circle at 30% 30%, #52b788, #2d6a4f);">
+        </div>
+        <div class="card-title">BIOSYNTH ARENA</div>
+        <div class="meta">
+          <div class="pill">Survival</div>
+          <div class="pill">Coming soon</div>
+        </div>
+        <div class="desc">Grow living weapons mid‑fight. Combine DNA pickups to evolve wild playstyles.</div>
+      </a>
+
+      <a class="card" href="#" data-difficulty="easy" onclick="alert('Coming soon!')">
+        <div class="thumb" data-icon="music" style="background: radial-gradient(circle at 30% 30%, #ff7a00, #ff00e6);">
+        </div>
+        <div class="card-title">ECHO RUNNER</div>
+        <div class="meta">
+          <div class="pill">Rhythm</div>
+          <div class="pill">Coming soon</div>
+        </div>
+        <div class="desc">Levels build from your music. Dash and shoot perfectly on‑beat to bend the track.</div>
+      </a>
+
+      <a class="card" href="#" data-difficulty="easy" onclick="alert('Coming soon!')">
+        <div class="thumb" data-icon="vortex" style="background: radial-gradient(circle at 30% 30%, #00f5d4, #780000);">
+        </div>
+        <div class="card-title">VORTEX SURVIVORS</div>
+        <div class="meta">
+          <div class="pill">Survivor</div>
+          <div class="pill">Coming soon</div>
+        </div>
+        <div class="desc">One‑stick chaos around a black hole. Time dilates—so do your builds.</div>
+      </a>
+
+      <a class="card" href="#" data-difficulty="hard" onclick="alert('Coming soon!')">
+        <div class="thumb" data-icon="zen" style="background: radial-gradient(circle at 30% 30%, #a8dadc, #1d3557);">
+        </div>
+        <div class="card-title">ZEN SLICE</div>
+        <div class="meta">
+          <div class="pill">Puzzle</div>
+          <div class="pill">Coming soon</div>
+        </div>
+        <div class="desc">Slice living fractals with perfect symmetry. Satisfying visuals, deceptively deep.</div>
+      </a>
+
+      <a class="card" href="#" onclick="alert('Coming soon!')">
+        <div class="thumb" data-icon="particles"
+          style="background: radial-gradient(circle at 30% 30%, #06d6a0, #26547c);"></div>
+        <div class="card-title">PARTICLE PAINTER</div>
+        <div class="meta">
+          <div class="pill">Creative</div>
+          <div class="pill">Coming soon</div>
+        </div>
+        <div class="desc">Paint with a billion sparks. Solve goals by sculpting flows and fields.</div>
+      </a>
+
+      <a class="card" href="#" onclick="alert('Coming soon!')">
+        <div class="thumb" data-icon="phase" style="background: radial-gradient(circle at 30% 30%, #ff4d6d, #2ec4b6);">
+        </div>
+        <div class="card-title">PHASE SHIFT</div>
+        <div class="meta">
+          <div class="pill">Metroidvania</div>
+          <div class="pill">Coming soon</div>
+        </div>
+        <div class="desc">Swap between overlapping realities to traverse impossible spaces and bosses.</div>
+      </a>
+    </div>
+  </section>
+
+  <footer>
+    <span id="year"></span> Web Games Hub Made with love and JavaScript
+  </footer>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+    // Difficulty filter logic
+    const filterWrap = document.getElementById('difficultyFilters');
+    const cards = Array.from(document.querySelectorAll('.grid .card'));
+    function applyFilter(value) {
+      cards.forEach(card => {
+        const diff = card.getAttribute('data-difficulty') || 'medium';
+        const visible = (value === 'all') || (diff === value);
+        card.style.display = visible ? '' : 'none';
+      });
+    }
+    filterWrap?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.filter-pill');
+      if (!btn) return;
+      const value = btn.getAttribute('data-value');
+      // toggle active UI
+      Array.from(filterWrap.querySelectorAll('.filter-pill')).forEach(b => b.removeAttribute('data-active'));
+      btn.setAttribute('data-active', 'true');
+      applyFilter(value);
+    });
+
+    // Icon generation per card using Canvas
+    function drawIcon(canvas, type) {
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      canvas.width = w * dpr; canvas.height = h * dpr;
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, w, h);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.shadowColor = 'rgba(0,255,166,0.35)';
+      ctx.shadowBlur = 12;
+
+      const cx = w / 2, cy = h / 2;
+      const R = Math.min(w, h) * 0.34;
+
+      function ring() {
+        ctx.beginPath();
+        ctx.arc(cx, cy, R * 1.05, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = 2; ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      }
+
+      switch (type) {
+        case 'maze':
+          ring();
+          ctx.lineWidth = 3;
+          // simple maze lines
+          ctx.beginPath(); ctx.moveTo(cx - R, cy - R * 0.5); ctx.lineTo(cx, cy - R * 0.5); ctx.lineTo(cx, cy + R * 0.6); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(cx - R * 0.6, cy - R); ctx.lineTo(cx - R * 0.6, cy - R * 0.1); ctx.lineTo(cx + R * 0.5, cy - R * 0.1); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(cx - R * 0.2, cy - R * 0.7); ctx.lineTo(cx - R * 0.2, cy + R * 0.2); ctx.lineTo(cx + R * 0.8, cy + R * 0.2); ctx.stroke();
+          break;
+        case 'plane':
+          ring();
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          ctx.moveTo(cx - R * 0.9, cy);
+          ctx.lineTo(cx + R * 0.5, cy);
+          ctx.lineTo(cx + R * 0.9, cy - R * 0.2);
+          ctx.moveTo(cx + R * 0.3, cy);
+          ctx.lineTo(cx + R * 0.55, cy + R * 0.18);
+          ctx.stroke();
+          break;
+        case 'blocks':
+          ring();
+          ctx.lineWidth = 3;
+          const s = R * 0.6;
+          ctx.strokeRect(cx - s * 0.9, cy - s * 0.6, s * 0.8, s * 0.8);
+          ctx.strokeRect(cx + s * 0.1, cy - s * 0.2, s * 0.8, s * 0.8);
+          break;
+        case 'drift':
+          ring();
+          ctx.lineWidth = 4;
+          ctx.beginPath(); ctx.arc(cx, cy, R * 0.2, 0, Math.PI * 2); ctx.stroke();
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(cx, cy, R * 0.65, Math.PI * 0.1, Math.PI * 1.4); ctx.stroke();
+          break;
+        case 'heist':
+          ring();
+          ctx.lineWidth = 3;
+          ctx.strokeRect(cx - R * 0.6, cy - R * 0.4, R * 1.2, R * 0.8);
+          ctx.beginPath(); ctx.moveTo(cx - R * 0.6, cy - R * 0.1); ctx.lineTo(cx + R * 0.6, cy - R * 0.1); ctx.stroke();
+          ctx.beginPath(); ctx.arc(cx + R * 0.3, cy + R * 0.15, R * 0.12, 0, Math.PI * 2); ctx.stroke();
+          break;
+        case 'gravity':
+          ring();
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(cx, cy - R * 0.7); ctx.lineTo(cx, cy + R * 0.7); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(cx - R * 0.4, cy - R * 0.2); ctx.lineTo(cx + R * 0.4, cy + R * 0.2); ctx.stroke();
+          break;
+        case 'time':
+          ring();
+          ctx.lineWidth = 3.5;
+          ctx.beginPath(); ctx.arc(cx, cy, R * 0.6, 0, Math.PI * 2); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + R * 0.25, cy - R * 0.25); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - R * 0.35); ctx.stroke();
+          break;
+        case 'light':
+          ring();
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(cx - R * 0.7, cy + R * 0.4); ctx.lineTo(cx + R * 0.7, cy - R * 0.4); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(cx - R * 0.3, cy + R * 0.2); ctx.lineTo(cx + R * 0.3, cy - R * 0.2); ctx.stroke();
+          break;
+        case 'orbit':
+          ring();
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.ellipse(cx, cy, R * 0.8, R * 0.5, Math.PI / 6, 0, Math.PI * 2); ctx.stroke();
+          ctx.beginPath(); ctx.arc(cx + R * 0.5, cy - R * 0.2, R * 0.12, 0, Math.PI * 2); ctx.stroke();
+          break;
+        case 'dna':
+          ring();
+          ctx.lineWidth = 3;
+          for (let i = -3; i <= 3; i++) {
+            const y = cy + i * (R * 0.2);
+            ctx.beginPath(); ctx.moveTo(cx - R * 0.6, y); ctx.bezierCurveTo(cx - R * 0.2, y - R * 0.1, cx + R * 0.2, y + R * 0.1, cx + R * 0.6, y); ctx.stroke();
+          }
+          break;
+        case 'music':
+          ring();
+          ctx.lineWidth = 3;
+          const bars = [0.4, 0.7, 0.5, 0.9, 0.6];
+          bars.forEach((b, i) => {
+            const x = cx - R * 0.6 + i * R * 0.3;
+            ctx.beginPath(); ctx.moveTo(x, cy + R * 0.5); ctx.lineTo(x, cy + R * (0.5 - b)); ctx.stroke();
+          });
+          break;
+        case 'vortex':
+          ring();
+          ctx.lineWidth = 3;
+          for (let t = 0; t < Math.PI * 2; t += Math.PI / 12) {
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(t) * R * 0.2, cy + Math.sin(t) * R * 0.2);
+            ctx.lineTo(cx + Math.cos(t) * R, cy + Math.sin(t) * R);
+            ctx.stroke();
+          }
+          break;
+        case 'zen':
+          ring();
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(cx, cy, R * 0.75, Math.PI * 0.2, Math.PI * 1.7); ctx.stroke();
+          break;
+        case 'particles':
+          ring();
+          ctx.fillStyle = 'rgba(255,255,255,0.6)';
+          for (let i = 0; i < 40; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const r = Math.random() * R * 0.85;
+            const x = cx + Math.cos(a) * r;
+            const y = cy + Math.sin(a) * r;
+            ctx.globalAlpha = 0.15 + Math.random() * 0.5;
+            ctx.beginPath(); ctx.arc(x, y, 2 + Math.random() * 2, 0, Math.PI * 2); ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+          break;
+        case 'phase':
+          ring();
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(cx - R * 0.15, cy, R * 0.55, Math.PI * 0.1, Math.PI * 1.7); ctx.stroke();
+          ctx.beginPath(); ctx.arc(cx + R * 0.15, cy, R * 0.55, Math.PI * 0.3, Math.PI * 1.9); ctx.stroke();
+          break;
+        default:
+          ring();
+      }
+    }
+
+    function injectThumbCanvases() {
+      document.querySelectorAll('.thumb').forEach(thumb => {
+        if (!thumb.querySelector('canvas.thumb-canvas')) {
+          const c = document.createElement('canvas'); c.className = 'thumb-canvas'; thumb.appendChild(c);
+        }
+        drawIcon(thumb.querySelector('canvas.thumb-canvas'), thumb.getAttribute('data-icon') || 'generic');
+      });
+    }
+
+    // Assign icon types per card by title matches (use title element now)
+    document.querySelectorAll('.card').forEach(card => {
+      const el = card.querySelector('.thumb');
+      const title = card.querySelector('.card-title');
+      const label = (title?.textContent || '').trim().toLowerCase();
+      const map = [
+        ['maze', 'maze'], ['sky', 'plane'], ['block', 'blocks'], ['quantum', 'drift'], ['heist', 'heist'],
+        ['gravity', 'gravity'], ['chrono', 'time'], ['shadow', 'light'], ['orbit', 'orbit'], ['bio', 'dna'],
+        ['echo', 'music'], ['vortex', 'vortex'], ['zen', 'zen'], ['particle', 'particles'], ['phase', 'phase']
+      ];
+      for (const [key, val] of map) { if (label.includes(key)) { el?.setAttribute('data-icon', val); break; } }
+    });
+
+    injectThumbCanvases();
+    window.addEventListener('resize', () => injectThumbCanvases());
+  </script>
+</body>
+
+</html>
